@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import '../controllers/chat_controller.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/typing_indicator.dart';
@@ -21,17 +22,24 @@ class ChatPage extends GetView<ChatController> {
             padding: const EdgeInsets.only(bottom: 24, top: 12),
             itemBuilder: (context, index) {
               if (index == 0 && controller.isLoading.value) {
-                // If it's the very first item (last index numerically in reversed list) and we're loading,
-                // we show either the streaming text or the typing dots.
                 if (controller.currentResponseText.value.isEmpty) {
-                  return const TypingIndicator();
+                  return Animate(
+                    child: TypingIndicator(), 
+                  ).fadeIn(duration: const Duration(milliseconds: 400))
+                   .slideY(begin: 0.1, end: 0);
                 } else {
-                  return _buildStreamingBubble(context);
+                  return Animate(
+                    child: _buildStreamingBubble(context),
+                  ).fadeIn(duration: const Duration(milliseconds: 300));
                 }
               }
               
               final int msgIndex = controller.isLoading.value ? index - 1 : index;
-              return MessageBubble(message: controller.messages[msgIndex]);
+              final msg = controller.messages[msgIndex];
+              return Animate(
+                child: MessageBubble(message: msg),
+              ).fadeIn(duration: const Duration(milliseconds: 400))
+               .slideX(begin: msg.isUser ? 0.05 : -0.05, end: 0);
             },
           )),
         ),
@@ -41,10 +49,12 @@ class ChatPage extends GetView<ChatController> {
   }
 
   Widget _buildConnectivityBanner(BuildContext context) {
-    return Obx(() => AnimatedContainer(
+    final banner = Obx(() => AnimatedContainer(
       duration: const Duration(milliseconds: 400),
-      height: controller.isOllamaOnline.value ? 0 : 36,
-      color: Colors.redAccent.withOpacity(0.9),
+      height: controller.isOllamaOnline.value ? 0 : 40,
+      decoration: BoxDecoration(
+        color: Colors.redAccent.withOpacity(0.9),
+      ),
       child: Center(
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -59,6 +69,11 @@ class ChatPage extends GetView<ChatController> {
         ),
       ),
     ));
+
+    return Animate(
+      child: banner,
+      target: controller.isOllamaOnline.value ? 0 : 1,
+    ).fadeIn().shimmer(delay: const Duration(seconds: 1));
   }
 
   Widget _buildStreamingBubble(BuildContext context) {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../core/services/settings_service.dart';
 import '../controllers/chat_controller.dart';
+import '../pages/history_page.dart';
 import '../pages/settings_page.dart';
 
 class AppDrawer extends StatelessWidget {
@@ -17,7 +18,15 @@ class AppDrawer extends StatelessWidget {
         children: [
           _buildHeader(context),
           ListTile(
-            leading: const Icon(Icons.settings, color: Colors.blueAccent),
+            leading: const Icon(Icons.history_rounded, color: Colors.blueAccent),
+            title: const Text('View Chat History'),
+            onTap: () {
+              Get.back();
+              Get.to(() => const HistoryPage());
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.settings, color: Colors.indigoAccent),
             title: const Text('AI Configuration'),
             onTap: () {
               Get.back();

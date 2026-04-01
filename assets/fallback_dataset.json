@@ -1,19 +1,50 @@
 {
   "greetings": [
-    "Hello! How can I assist you today?",
-    "Hi there! Feel free to ask me anything."
+    "Hello! I am your resilient offline assistant. How can I help you today?",
+    "Hi there! Even without the server, I'm here to assist with core knowledge.",
+    "Greetings! I'm running in local fallback mode. Ask me about Flutter or AI architecture!",
+    "Hey! My local database is ready to help you while we're offline."
   ],
-  "fallback_responses": {
-    "default": "I'm currently offline, but here's a helpful tip: always keep your device powered and your data backed up."
-  },
   "topics": {
     "flutter": [
-      "Flutter enables beautiful cross‑platform apps with a single codebase.",
-      "Use GetX for state management to keep your UI reactive and clean."
+      "Flutter is Google's UI toolkit for building beautiful, natively compiled applications for mobile, web, and desktop from a single codebase.",
+      "The core of Flutter is its widget-based architecture. Everything from a simple text to a complex layout is a widget.",
+      "Flutter uses the Dart programming language, which is optimized for fast UI rendering and high-velocity development.",
+      "Hot Reload is one of Flutter's best features, allowing you to see changes in sub-seconds without losing state."
+    ],
+    "getx": [
+      "GetX is an extremely light and powerful solution for Flutter, providing high-performance state management, dependency injection, and route management.",
+      "With GetX, you don't need context for navigation, making your code cleaner and more decoupled.",
+      "GetX separates dependency injection from the view, which perfectly aligns with Clean Architecture principles."
+    ],
+    "clean architecture": [
+      "Clean Architecture (by Uncle Bob) helps separate concerns into layers like Domain, Data, and Presentation, making apps scalable and testable.",
+      "The Domain layer is the heart of Clean Architecture; it contains business rules and entities, remaining independent of any external frameworks.",
+      "In our app, we use Clean Architecture to ensure that switching between Ollama and Local Fallbacks is seamless at the Repository level."
     ],
     "ollama": [
-      "Ollama runs LLMs locally, perfect for offline AI capabilities.",
-      "Make sure the Ollama server is reachable at the configured address."
+      "Ollama is a bridge that lets you run large language models like Llama 3 or Mistral locally on your machine.",
+      "It provides a simple API that we communicate with using HTTP streaming, providing real-time AI responses.",
+      "Running Ollama ensures your data never leaves your local network, providing maximum privacy and speed."
+    ],
+    "ai": [
+      "Artificial Intelligence locally is the future! It ensures privacy, reduces latency, and works even in the middle of nowhere.",
+      "Local LLMs are getting smaller and more efficient, allowing them to run on consumer hardware like your Mac or high-end phones.",
+      "Hybrid AI approaches (Server + Local Fallback) ensure that the user experience is never interrupted by network issues."
+    ],
+    "help": [
+      "I can help with Flutter development tips, explain our app's architecture, or discuss the benefits of local AI.",
+      "Try asking about 'Clean Architecture', 'How Flutter works', or 'Local LLMs'!",
+      "If you're having trouble connecting to Ollama, check your Mac's IP address and ensure OLLAMA_HOST is set to 0.0.0.0."
+    ],
+    "interview": [
+      "Common Flutter interview questions: What is the difference between Stateless and Stateful widgets? How does the Widget Tree differ from the Element Tree?",
+      "Architecture interview tip: Explain why we keep the Domain layer free of Flutter dependencies (it's for pure logic testability).",
+      "GetX vs Bloc: GetX is great for rapid development and simplicity, while Bloc is excellent for complex, highly-structured event-driven flows."
     ]
+  },
+  "fallback_responses": {
+    "default": "I'm currently in local mode. While I don't have the full power of the server LLM right now, I can still assist with topics like Flutter, AI, and Clean Architecture. Try asking about those!",
+    "no_internet": "No internet? No problem. Our app uses Hive and local JSON datasets to stay functional anywhere."
   }
 }
