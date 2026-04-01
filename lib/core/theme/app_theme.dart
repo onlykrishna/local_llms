@@ -22,7 +22,7 @@ class AppTheme {
         color: Colors.black87,
       ),
     ),
-    cardTheme: CardTheme(
+    cardTheme: CardThemeData(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
       ),
@@ -53,7 +53,7 @@ class AppTheme {
         color: Colors.white70,
       ),
     ),
-    cardTheme: CardTheme(
+    cardTheme: CardThemeData(
       color: Colors.white12,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),

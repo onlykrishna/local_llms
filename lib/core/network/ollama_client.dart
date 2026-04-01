@@ -27,21 +27,20 @@ class OllamaClient {
         throw HttpException('Ollama Error: ${response.statusCode}');
       }
 
-      // Listen to the stream of chunks
-      await for (final List<int> chunk in response.stream) {
-        final String decoded = utf8.decode(chunk);
-        // Ollama sends JSON per line in streaming mode
-        final List<String> lines = decoded.split('\n');
-        for (String line in lines) {
-          if (line.trim().isEmpty) continue;
-          try {
-            final Map<String, dynamic> data = json.decode(line);
-            if (data['response'] != null) {
-              yield data['response'].toString();
-            }
-          } catch (e) {
-            // Partial chunk or non-JSON line, skip
+      // Decode and split stream into lines properly to handle partial chunks
+      final Stream<String> lineStream = response.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter());
+
+      await for (final String line in lineStream) {
+        if (line.trim().isEmpty) continue;
+        try {
+          final Map<String, dynamic> data = json.decode(line);
+          if (data['response'] != null) {
+            yield data['response'].toString();
           }
+        } catch (e) {
+          // Silent catch for invalid JSON in stream
         }
       }
     } catch (e) {

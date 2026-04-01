@@ -19,6 +19,7 @@ class ChatController extends GetxController {
 
   final TextEditingController inputController = TextEditingController();
   final ScrollController scrollController = ScrollController();
+  Timer? _statusTimer;
 
   ChatController(this._repository);
 
@@ -29,13 +30,21 @@ class ChatController extends GetxController {
     _checkServerStatusLoop();
   }
 
+  @override
+  void onClose() {
+    _statusTimer?.cancel();
+    inputController.dispose();
+    scrollController.dispose();
+    super.onClose();
+  }
+
   void _loadHistory() async {
     final history = await _repository.getChatHistory();
     messages.assignAll(history);
   }
 
   void _checkServerStatusLoop() {
-    Timer.periodic(const Duration(seconds: 10), (timer) async {
+    _statusTimer = Timer.periodic(const Duration(seconds: 10), (timer) async {
       isOllamaOnline.value = await _repository.isOllamaUp();
     });
   }

@@ -12,7 +12,7 @@ class AppConstants {
   /// Base URL for the local Ollama server. The default points to the Android
   /// emulator's host‑only address. Adjust if you run Ollama on a different
   /// device or port.
-  static const String ollamaBaseUrl = 'http://10.0.2.2:11434/api';
+  static const String ollamaBaseUrl = 'http://192.168.68.115:11434/api';
 
   /// Timeout (in seconds) for HTTP requests to the Ollama server.
   static const int requestTimeout = 30;

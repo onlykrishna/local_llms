@@ -25,7 +25,7 @@ class ChatBinding extends Bindings {
       Get.find<FallbackDatasetService>(),
       Hive.box<ChatMessage>(AppConstants.chatBoxName),
     );
-    Get.put(ChatRepository);
+    Get.put<ChatRepository>(repository);
 
     // Controller
     Get.put(ChatController(repository));

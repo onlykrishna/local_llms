@@ -47,7 +47,7 @@ class FallbackDatasetService extends GetxService {
     responseText ??= _dataset?['fallback_responses']?['default'] ?? 'I am offline.';
 
     // Simulate streaming by splitting by tokens (words)
-    final List<String> tokens = responseText.split(' ');
+    final List<String> tokens = responseText!.split(' ');
     for (String token in tokens) {
       await Future.delayed(const Duration(milliseconds: 60));
       yield '$token ';
