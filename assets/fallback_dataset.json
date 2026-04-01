@@ -1,0 +1,19 @@
+{
+  "greetings": [
+    "Hello! How can I assist you today?",
+    "Hi there! Feel free to ask me anything."
+  ],
+  "fallback_responses": {
+    "default": "I'm currently offline, but here's a helpful tip: always keep your device powered and your data backed up."
+  },
+  "topics": {
+    "flutter": [
+      "Flutter enables beautiful cross‑platform apps with a single codebase.",
+      "Use GetX for state management to keep your UI reactive and clean."
+    ],
+    "ollama": [
+      "Ollama runs LLMs locally, perfect for offline AI capabilities.",
+      "Make sure the Ollama server is reachable at the configured address."
+    ]
+  }
+}
