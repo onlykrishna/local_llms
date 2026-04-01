@@ -12,16 +12,9 @@ import '../../core/constants/app_constants.dart';
 class ChatBinding extends Bindings {
   @override
   void dependencies() {
-    // Services
-    Get.put(SettingsService().init());
-    Get.put(FallbackDatasetService().init());
-
-    // Data Sources & Clients
-    final ollamaClient = OllamaClient();
-    
     // Repository
     final ChatRepository repository = ChatRepositoryImpl(
-      ollamaClient,
+      OllamaClient(),
       Get.find<FallbackDatasetService>(),
       Hive.box<ChatMessage>(AppConstants.chatBoxName),
     );

@@ -10,6 +10,8 @@ import 'presentation/pages/chat_page.dart';
 import 'presentation/pages/settings_page.dart';
 import 'presentation/widgets/app_drawer.dart';
 import 'domain/entities/chat_message.dart';
+import 'core/services/settings_service.dart';
+import 'core/services/fallback_dataset_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,6 +19,10 @@ void main() async {
   // Initialize GetStorage for settings
   await GetStorage.init();
   
+  // Initialize Core Services with dependency injection
+  await Get.putAsync(() => SettingsService().init());
+  await Get.putAsync(() => FallbackDatasetService().init());
+
   // Initialize Hive for local storage
   await Hive.initFlutter();
   Hive.registerAdapter(ChatMessageAdapter());
