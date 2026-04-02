@@ -15,12 +15,20 @@ class SettingsPage extends StatelessWidget {
       body: ListView(
         children: [
           _buildSectionHeader('Model Configuration'),
+          Obx(() => SwitchListTile(
+            title: const Text('Force Offline AI Mode'),
+            subtitle: const Text('Use on-device hardware (Gemma) exclusively.'),
+            value: settings.useOfflineMode.value,
+            onChanged: (_) => settings.toggleOfflineMode(),
+            activeTrackColor: Colors.blueAccent.withOpacity(0.5),
+            activeColor: Colors.blueAccent,
+          )),
           Obx(() => ListTile(
             title: const Text('Primary Local Model'),
-            subtitle: const Text('Switch between downloaded Ollama models.'),
+            subtitle: const Text('Switch between downloaded Ollama models (Online/Server mode).'),
             trailing: DropdownButton<String>(
               value: settings.selectedModel.value,
-              onChanged: (v) => settings.updateModel(v!),
+              onChanged: settings.useOfflineMode.value ? null : (v) => settings.updateModel(v!),
               items: models.map((m) => DropdownMenuItem(value: m, child: Text(m.toUpperCase()))).toList(),
             ),
           )),

@@ -8,6 +8,8 @@ import '../../domain/entities/chat_message.dart';
 import '../../domain/repositories/chat_repository.dart';
 import '../controllers/chat_controller.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/services/hardware_inference_service.dart';
+import '../../core/services/settings_service.dart';
 
 class ChatBinding extends Bindings {
   @override
@@ -16,6 +18,7 @@ class ChatBinding extends Bindings {
     final ChatRepository repository = ChatRepositoryImpl(
       OllamaClient(),
       Get.find<FallbackDatasetService>(),
+      Get.find<HardwareInferenceService>(),
       Hive.box<ChatMessage>(AppConstants.chatBoxName),
     );
     Get.put<ChatRepository>(repository);

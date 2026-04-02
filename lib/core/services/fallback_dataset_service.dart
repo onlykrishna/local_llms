@@ -4,16 +4,18 @@ import 'package:get/get.dart';
 import '../constants/app_constants.dart';
 
 class FallbackDatasetService extends GetxService {
-  Map<String, dynamic>? _dataset;
+  Map<String, dynamic>? _brain;
+  Map<String, dynamic>? _fallback;
 
   Future<FallbackDatasetService> init() async {
     try {
-      final String response = await rootBundle.loadString(AppConstants.fallbackDatasetPath);
-      _dataset = json.decode(response);
+      final String brainData = await rootBundle.loadString(AppConstants.localBrainPath);
+      _brain = json.decode(brainData);
+      
+      final String fallbackData = await rootBundle.loadString(AppConstants.fallbackDatasetPath);
+      _fallback = json.decode(fallbackData);
     } catch (e) {
-      _dataset = {
-        'default': 'Hey! It seems we are completely offline and can\'t reach our model. How about we discuss Flutter or offline-AI later?'
-      };
+      // Fallback in case of asset failure
     }
     return this;
   }
@@ -23,9 +25,28 @@ class FallbackDatasetService extends GetxService {
     String message = userMessageText.toLowerCase();
     String? responseText;
 
-    // Check for topic keywords
-    if (_dataset?['topics'] != null) {
-      final topics = _dataset!['topics'] as Map<String, dynamic>;
+    // Simulate "Thinking" stages for "Premium Mode"
+    if (_brain?['placeholders']?['thinking'] != null) {
+      final List<dynamic> stages = _brain!['placeholders']['thinking'];
+      // Yield thinking states as comments to be handled by UI or just as status skips
+    }
+
+    // Process Intents (Smart Regex Pattern Matching)
+    if (_brain?['intents'] != null) {
+      final List<dynamic> intents = _brain!['intents'];
+      for (var intent in intents) {
+        final pattern = intent['pattern'] as String;
+        final regex = RegExp(pattern, caseSensitive: false);
+        if (regex.hasMatch(message)) {
+          responseText = intent['response'] as String;
+          break;
+        }
+      }
+    }
+
+    // Check for topic keywords in secondary fallback
+    if (responseText == null && _fallback?['topics'] != null) {
+      final topics = _fallback!['topics'] as Map<String, dynamic>;
       for (var entry in topics.entries) {
         if (message.contains(entry.key)) {
           final List<dynamic> options = entry.value;
@@ -35,21 +56,14 @@ class FallbackDatasetService extends GetxService {
       }
     }
 
-    // Check for greetings
-    if (responseText == null && _dataset?['greetings'] != null) {
-      final List<dynamic> greetings = _dataset!['greetings'];
-      if (message.contains('hi') || message.contains('hello')) {
-        responseText = (greetings..shuffle()).first.toString();
-      }
-    }
-
-    // Default response if no topic or greeting matches
-    responseText ??= _dataset?['fallback_responses']?['default'] ?? 'I am offline.';
+    // Default response if no intent or topic matches
+    responseText ??= _brain?['default_fallback'] ?? 'I am in local mode. Try asking about Flutter or AI.';
 
     // Simulate streaming by splitting by tokens (words)
     final List<String> tokens = responseText!.split(' ');
     for (String token in tokens) {
-      await Future.delayed(const Duration(milliseconds: 60));
+      // Slower delay for long answers to make it feel more "thoughtful"
+      await Future.delayed(const Duration(milliseconds: 70));
       yield '$token ';
     }
   }

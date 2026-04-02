@@ -49,26 +49,41 @@ class ChatPage extends GetView<ChatController> {
   }
 
   Widget _buildConnectivityBanner(BuildContext context) {
-    final banner = Obx(() => AnimatedContainer(
-      duration: const Duration(milliseconds: 400),
-      height: controller.isOllamaOnline.value ? 0 : 40,
-      decoration: BoxDecoration(
-        color: Colors.redAccent.withOpacity(0.9),
-      ),
-      child: Center(
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
-            Icon(Icons.offline_bolt, color: Colors.white, size: 14),
-            SizedBox(width: 8),
-            Text(
-              'Ollama Server Unreachable: Using Offline Local Datasets',
-              style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-            ),
-          ],
+    final banner = Obx(() {
+      final isOnline = controller.isOllamaOnline.value;
+      final isHWReady = controller.isHardwareReady.value;
+      
+      String text = 'Ollama Server Unreachable: Using Offline Local Datasets';
+      IconData icon = Icons.offline_bolt;
+      Color color = Colors.redAccent.withOpacity(0.9);
+
+      if (isOnline) return const SizedBox.shrink();
+
+      if (isHWReady) {
+        text = 'Hardware AI Active: Gemma 2B Inference Running Locally';
+        icon = Icons.psychology;
+        color = Colors.teal.shade800.withOpacity(0.9);
+      }
+
+      return AnimatedContainer(
+        duration: const Duration(milliseconds: 400),
+        height: 40,
+        decoration: BoxDecoration(color: color),
+        child: Center(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: Colors.white, size: 14),
+              const SizedBox(width: 8),
+              Text(
+                text,
+                style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
         ),
-      ),
-    ));
+      );
+    });
 
     return Animate(
       child: banner,

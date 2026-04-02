@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import '../../domain/entities/chat_message.dart';
 import '../../domain/repositories/chat_repository.dart';
 import '../../core/services/settings_service.dart';
+import '../../core/services/hardware_inference_service.dart';
 import 'package:uuid/uuid.dart';
 
 class ChatController extends GetxController {
@@ -15,6 +16,7 @@ class ChatController extends GetxController {
   final RxList<ChatMessage> messages = <ChatMessage>[].obs;
   final RxBool isLoading = false.obs;
   final RxBool isOllamaOnline = false.obs;
+  final RxBool isHardwareReady = false.obs; // New!
   final RxString currentResponseText = ''.obs;
 
   final TextEditingController inputController = TextEditingController();
@@ -28,6 +30,14 @@ class ChatController extends GetxController {
     super.onInit();
     _loadHistory();
     _checkServerStatusLoop();
+    _checkInitialStatuses();
+  }
+
+  void _checkInitialStatuses() async {
+    isOllamaOnline.value = await _repository.isOllamaUp();
+    // Hardware service is initialized in main, we just read the result
+    final hwService = Get.find<HardwareInferenceService>();
+    isHardwareReady.value = hwService.isReady;
   }
 
   @override

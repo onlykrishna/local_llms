@@ -22,6 +22,7 @@ class AppConstants {
   // ---------------------------------------------------------------------
   /// Path to the bundled JSON file that contains offline fallback responses.
   static const String fallbackDatasetPath = 'assets/fallback_dataset.json';
+  static const String localBrainPath = 'assets/local_brain.json';
 
   /// Minimum number of characters to generate before falling back to the
   /// dataset when the LLM does not respond.
@@ -37,4 +38,5 @@ class AppConstants {
   // ---------------------------------------------------------------------
   static const String selectedModelKey = 'selected_model';
   static const String isDarkModeKey = 'is_dark_mode';
+  static const String useOfflineModeKey = 'use_offline_mode';
 }
