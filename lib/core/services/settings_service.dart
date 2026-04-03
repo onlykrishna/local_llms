@@ -7,7 +7,7 @@ class SettingsService extends GetxService {
   final _storage = GetStorage();
 
   // Model & UI
-  final RxString selectedModel = 'mistral'.obs;
+  final RxString selectedModel = 'mistral'.obs; // We keep the variable name for now as it's used elsewhere
   final RxBool isDarkMode = true.obs;
   final RxBool useOfflineMode = false.obs;
 
@@ -23,7 +23,8 @@ class SettingsService extends GetxService {
   final RxInt streamDelayMs = 0.obs;
 
   Future<SettingsService> init() async {
-    selectedModel.value  = _storage.read(AppConstants.selectedModelKey)   ?? 'mistral';
+    // UPDATED to use AppConstants.modelPathKey ('model_path')
+    selectedModel.value  = _storage.read(AppConstants.modelPathKey)      ?? 'mistral';
     isDarkMode.value     = _storage.read(AppConstants.isDarkModeKey)      ?? true;
     useOfflineMode.value = _storage.read(AppConstants.useOfflineModeKey)  ?? false;
     ollamaIp.value       = _storage.read('ollama_ip')                     ?? '192.168.1.100';
@@ -36,7 +37,7 @@ class SettingsService extends GetxService {
 
   void updateModel(String model) {
     selectedModel.value = model;
-    _storage.write(AppConstants.selectedModelKey, model);
+    _storage.write(AppConstants.modelPathKey, model); // UPDATED to model_path key
   }
 
   void toggleDarkMode() {

@@ -13,7 +13,7 @@ class AppConstants {
   static const String settingsBoxName = 'settings';
 
   // GetStorage keys
-  static const String selectedModelKey = 'selected_model';
+  static const String modelPathKey = 'model_path'; // EXACTLY AS REQUESTED
   static const String isDarkModeKey = 'is_dark_mode';
   static const String useOfflineModeKey = 'use_offline_mode';
 }

@@ -1,8 +1,8 @@
 # llamadart (llama.cpp JNI layer)
 -keep class com.llamadart.** { *; }
--keepclasseswithmembernames class * {
-    native <methods>;
-}
+-keep class dev.leehack.** { *; }
+-keepclassmembers class * { native <methods>; }
+-dontwarn dev.leehack.**
 
 # Flutter plugins
 -keep class io.flutter.plugins.** { *; }

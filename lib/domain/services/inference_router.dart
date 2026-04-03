@@ -26,10 +26,12 @@ class InferenceRouterService extends GetxService {
 
   late SettingsService _settings;
   late OnDeviceInferenceService _onDevice;
+  late DomainService _domainService;
 
   Future<InferenceRouterService> init() async {
     _settings = Get.find<SettingsService>();
     _onDevice = Get.find<OnDeviceInferenceService>();
+    _domainService = Get.find<DomainService>();
     return this;
   }
 
@@ -49,19 +51,19 @@ class InferenceRouterService extends GetxService {
 
   Future<bool> _hasInternet() async {
     final result = await Connectivity().checkConnectivity();
-    return result.isNotEmpty && !result.contains(ConnectivityResult.none);
+    return result.isNotEmpty && !result.every((r) => r == ConnectivityResult.none);
   }
 
   Future<InferenceBackend> _resolveBackend() async {
-    // Layer 1: Try Ollama LAN
+    // 1. Try Ollama LAN
     if (await _isOllamaReachable()) {
       return InferenceBackend.ollama;
     }
-    // Layer 2: Internet → Gemini
+    // 2. Internet → Gemini
     if (await _hasInternet() && _settings.geminiApiKey.value.isNotEmpty) {
       return InferenceBackend.gemini;
     }
-    // Layer 3: On-device
+    // 3. On-device
     return InferenceBackend.onDevice;
   }
 
@@ -73,6 +75,8 @@ class InferenceRouterService extends GetxService {
   }) async* {
     final backend = await _resolveBackend();
     currentBackend.value = backend;
+
+    final domainName = _domainService.selectedDomain.value.name;
 
     switch (backend) {
       case InferenceBackend.ollama:
@@ -89,11 +93,15 @@ class InferenceRouterService extends GetxService {
         } on GeminiRateLimitException {
           // Fallback to on-device
           currentBackend.value = InferenceBackend.onDevice;
-          yield* _onDevice.respond(userMessage, systemPrompt);
+          yield* _onDevice.respond(userMessage, systemPrompt, domainName);
+        } catch (e) {
+             yield '\n[Gemini Error: $e]. Falling back...';
+             currentBackend.value = InferenceBackend.onDevice;
+             yield* _onDevice.respond(userMessage, systemPrompt, domainName);
         }
         break;
       case InferenceBackend.onDevice:
-        yield* _onDevice.respond(userMessage, systemPrompt);
+        yield* _onDevice.respond(userMessage, systemPrompt, domainName);
         break;
     }
   }
@@ -133,15 +141,16 @@ class InferenceRouterService extends GetxService {
         try {
           final lines = chunk.split('\n');
           for (final line in lines) {
-            if (line.trim().isEmpty) continue;
-            final json = line.trim();
-            // Ollama returns {"message":{"role":"assistant","content":"token"},"done":false}
-            final start = json.indexOf('"content":"');
+            String cleanLine = line.trim();
+            if (cleanLine.isEmpty) continue;
+            
+            // Ollama JSON uses "content":"token"
+            final start = cleanLine.indexOf('"content":"');
             if (start != -1) {
               final contentStart = start + 11;
-              final contentEnd = json.indexOf('"', contentStart);
+              final contentEnd = cleanLine.indexOf('"', contentStart);
               if (contentEnd > contentStart) {
-                yield json.substring(contentStart, contentEnd);
+                yield cleanLine.substring(contentStart, contentEnd);
               }
             }
           }

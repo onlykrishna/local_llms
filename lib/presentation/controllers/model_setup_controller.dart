@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:get/get.dart';
 import 'package:path_provider/path_provider.dart';
+import '../../core/services/settings_service.dart';
 
 class ModelSetupController extends GetxController {
   static const String _modelUrl =
@@ -10,6 +11,7 @@ class ModelSetupController extends GetxController {
       'resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf';
   static const String _modelFileName = 'llama-3.2-1b-q4.gguf';
 
+  final SettingsService _settings = Get.find<SettingsService>();
   final downloadProgress = 0.0.obs;
   final downloadedMB = 0.0.obs;
   final totalMB = 0.0.obs;
@@ -31,6 +33,7 @@ class ModelSetupController extends GetxController {
     if (path != null) {
       modelPath.value = path;
       isModelReady.value = true;
+      _settings.updateModel(path); // Update global settings
     }
   }
 
@@ -106,6 +109,7 @@ class ModelSetupController extends GetxController {
       await partialFile.rename(destPath);
       modelPath.value = destPath;
       isModelReady.value = true;
+      _settings.updateModel(destPath); // Update global settings
       Get.snackbar('✅ Model Ready', 'Llama 3.2 1B installed successfully!');
     } on DioException catch (e) {
       if (e.type != DioExceptionType.cancel) {
@@ -145,6 +149,7 @@ class ModelSetupController extends GetxController {
       await srcFile.copy(dest);
       modelPath.value = dest;
       isModelReady.value = true;
+      _settings.updateModel(dest); // Update global settings
       Get.snackbar('✅ Model Registered', 'Model successfully copied to app storage.');
     } finally {
       isDownloading.value = false;

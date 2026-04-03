@@ -2,7 +2,7 @@
 /// Injected into every request across all backends (Gemini, Ollama, llama.cpp).
 enum InferenceDomain { health, bollywood, education, general }
 
-extension InferenceDomainX on InferenceDomain {
+extension InferenceDomainExtension on InferenceDomain {
   String get label {
     switch (this) {
       case InferenceDomain.health:      return 'Health';

@@ -29,7 +29,7 @@ void main() async {
     await Get.putAsync(() => SettingsService().init());
     await Get.putAsync(() => FallbackDatasetService().init());
     await Get.putAsync(() => DomainService().init());
-    await Get.putAsync(() => OnDeviceInferenceService().init());
+    Get.put(OnDeviceInferenceService());
     await Get.putAsync(() => InferenceRouterService().init());
   } catch (e) {
     debugPrint('🚨 Startup Error: $e');
