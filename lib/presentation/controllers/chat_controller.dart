@@ -1,26 +1,36 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:uuid/uuid.dart';
 import '../../domain/entities/chat_message.dart';
 import '../../domain/repositories/chat_repository.dart';
+import '../../domain/services/inference_router.dart';
+import '../../domain/services/domain_service.dart';
 import '../../core/services/settings_service.dart';
-import '../../core/services/hardware_inference_service.dart';
-import 'package:uuid/uuid.dart';
+
+enum MessageState { idle, thinking, streaming, cancelled, done, error }
 
 class ChatController extends GetxController {
   final ChatRepository _repository;
+  final InferenceRouterService _router = Get.find<InferenceRouterService>();
+  final DomainService _domainService = Get.find<DomainService>();
   final SettingsService _settings = Get.find<SettingsService>();
-  final Uuid _uuid = const Uuid();
+  final _uuid = const Uuid();
 
-  // Observable state
+  // --- Reactive State -------------------------------------------------------
   final RxList<ChatMessage> messages = <ChatMessage>[].obs;
-  final RxBool isLoading = false.obs;
-  final RxBool isOllamaOnline = false.obs;
-  final RxBool isHardwareReady = false.obs; // New!
+  final RxBool isGenerating = false.obs;
+  final Rx<MessageState> currentMessageState = MessageState.idle.obs;
   final RxString currentResponseText = ''.obs;
+  final RxBool isOllamaOnline = false.obs; // kept for backward UI compat
 
   final TextEditingController inputController = TextEditingController();
   final ScrollController scrollController = ScrollController();
+
+  // --- Internal State -------------------------------------------------------
+  final StringBuffer _responseBuffer = StringBuffer();
+  StreamSubscription<String>? _currentSubscription;
+  String? _currentPlaceholderId;
   Timer? _statusTimer;
 
   ChatController(this._repository);
@@ -29,79 +39,151 @@ class ChatController extends GetxController {
   void onInit() {
     super.onInit();
     _loadHistory();
-    _checkServerStatusLoop();
-    _checkInitialStatuses();
-  }
-
-  void _checkInitialStatuses() async {
-    isOllamaOnline.value = await _repository.isOllamaUp();
-    // Hardware service is initialized in main, we just read the result
-    final hwService = Get.find<HardwareInferenceService>();
-    isHardwareReady.value = hwService.isReady;
+    _startOllamaStatusLoop();
   }
 
   @override
   void onClose() {
     _statusTimer?.cancel();
+    _currentSubscription?.cancel();
     inputController.dispose();
     scrollController.dispose();
     super.onClose();
   }
 
-  void _loadHistory() async {
-    final history = await _repository.getChatHistory();
-    messages.assignAll(history);
-  }
-
-  void _checkServerStatusLoop() {
-    _statusTimer = Timer.periodic(const Duration(seconds: 10), (timer) async {
-      isOllamaOnline.value = await _repository.isOllamaUp();
-    });
-  }
-
-  /// Send message and handle streaming response
+  // ---------------------------------------------------------------------------
+  // SEND MESSAGE (cancel-safe)
+  // ---------------------------------------------------------------------------
   Future<void> sendMessage() async {
-    final String query = inputController.text.trim();
-    if (query.isEmpty || isLoading.isTrue) return;
+    final text = inputController.text.trim();
+    if (text.isEmpty) return;
+
+    // If already generating → cancel first, wait for cleanup
+    if (isGenerating.value) {
+      _cancelCurrentResponse(keepPartial: true);
+      await Future.delayed(const Duration(milliseconds: 150));
+    }
 
     inputController.clear();
-    
-    // Add user message
-    final userMsg = ChatMessage(id: _uuid.v4(), content: query, isUser: true);
+
+    // 1. Add user message
+    final userMsg = ChatMessage(id: _uuid.v4(), content: text, isUser: true);
     messages.insert(0, userMsg);
-    await _repository.saveMessage(userMsg);
+    _repository.saveMessage(userMsg);
 
-    // Prepare AI response message
-    isLoading.value = true;
+    // 2. Placeholder for AI response
+    final placeholderId = _uuid.v4();
+    _currentPlaceholderId = placeholderId;
+    _responseBuffer.clear();
     currentResponseText.value = '';
-    final aiId = _uuid.v4();
-    
-    try {
-      final String model = _settings.selectedModel.value;
-      final responseStream = _repository.getStreamingResponse(query, model);
-      
-      await for (final chunk in responseStream) {
-        currentResponseText.value += chunk;
-        _scrollToBottom();
-      }
+    currentMessageState.value = MessageState.thinking;
+    isGenerating.value = true;
 
-      // Finalize message and save
-      final aiMsg = ChatMessage(id: aiId, content: currentResponseText.value, isUser: false);
-      messages.insert(0, aiMsg);
-      await _repository.saveMessage(aiMsg);
-    } catch (e) {
-      Get.snackbar('Error', 'Communication failed: $e', snackPosition: SnackPosition.BOTTOM);
-    } finally {
-      isLoading.value = false;
-      currentResponseText.value = '';
+    // 3. Build history for context window
+    final contextWindow = _settings.contextWindow.value;
+    final history = messages
+        .skip(1) // skip the user message we just added
+        .take(contextWindow)
+        .map((m) => {'isUser': m.isUser, 'content': m.content})
+        .toList()
+        .reversed
+        .toList();
+
+    // 4. Stream inference
+    final systemPrompt = _domainService.getSystemPrompt();
+    final stream = _router.respond(
+      userMessage: text,
+      systemPrompt: systemPrompt,
+      history: history,
+    );
+
+    currentMessageState.value = MessageState.streaming;
+
+    _currentSubscription = stream.listen(
+      (token) {
+        _responseBuffer.write(token);
+        currentResponseText.value = _responseBuffer.toString();
+        _scrollToBottom();
+      },
+      onDone: () async {
+        currentMessageState.value = MessageState.done;
+        isGenerating.value = false;
+
+        final aiMsg = ChatMessage(
+          id: placeholderId,
+          content: _responseBuffer.toString(),
+          isUser: false,
+        );
+        messages.insert(0, aiMsg);
+        await _repository.saveMessage(aiMsg);
+        currentResponseText.value = '';
+        _currentPlaceholderId = null;
+      },
+      onError: (e) {
+        currentMessageState.value = MessageState.error;
+        isGenerating.value = false;
+        final errMsg = ChatMessage(
+          id: placeholderId,
+          content: '⚠️ Error: ${e.toString()}',
+          isUser: false,
+        );
+        messages.insert(0, errMsg);
+        _repository.saveMessage(errMsg);
+        currentResponseText.value = '';
+        _currentPlaceholderId = null;
+      },
+      cancelOnError: true,
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // CANCEL (stop button)
+  // ---------------------------------------------------------------------------
+  void stopGeneration() => _cancelCurrentResponse(keepPartial: true);
+
+  void _cancelCurrentResponse({bool keepPartial = true}) {
+    _currentSubscription?.cancel();
+    _currentSubscription = null;
+    _router.cancelCurrentRequest();
+
+    final partial = _responseBuffer.toString();
+    if (keepPartial && partial.isNotEmpty) {
+      // Show partial with [stopped] marker
+      final cancelledMsg = ChatMessage(
+        id: _currentPlaceholderId ?? _uuid.v4(),
+        content: '$partial [stopped]',
+        isUser: false,
+      );
+      messages.insert(0, cancelledMsg);
+      _repository.saveMessage(cancelledMsg);
     }
+
+    currentResponseText.value = '';
+    _responseBuffer.clear();
+    _currentPlaceholderId = null;
+    currentMessageState.value = MessageState.cancelled;
+    isGenerating.value = false;
+  }
+
+  // ---------------------------------------------------------------------------
+  // HELPERS
+  // ---------------------------------------------------------------------------
+  void _loadHistory() async {
+    final history = await _repository.getChatHistory();
+    messages.assignAll(history.reversed.toList());
+  }
+
+  void _startOllamaStatusLoop() {
+    _statusTimer = Timer.periodic(const Duration(seconds: 8), (_) async {
+      isOllamaOnline.value = await _repository.isOllamaUp();
+    });
   }
 
   void _scrollToBottom() {
     if (scrollController.hasClients) {
       scrollController.animateTo(
-        0.0, // Because standard list is reversed
-        duration: const Duration(milliseconds: 300),
+        0,
+        duration: const Duration(milliseconds: 200),
         curve: Curves.easeOut,
       );
     }
@@ -110,6 +192,6 @@ class ChatController extends GetxController {
   void clearChat() async {
     await _repository.clearHistory();
     messages.clear();
-    Get.back(); // close drawer/menu
+    Get.back();
   }
 }

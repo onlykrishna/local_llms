@@ -1,33 +1,45 @@
 name: offline_ai_flutter_demo
 description: A Flutter demo app showcasing offline AI with local LLMs using Clean Architecture and GetX.
-publish_to: 'none' # Prevent accidental publishing
-version: 1.0.0+1
+publish_to: 'none'
+version: 2.0.0+1
 environment:
   sdk: '>=3.2.0 <4.0.0'
 
 dependencies:
   flutter:
     sdk: flutter
+
+  # State Management & DI
   get: ^4.6.6
   get_storage: ^2.1.1
+
+  # Local database
   hive: ^2.2.3
   hive_flutter: ^1.1.0
+
+  # Networking
+  dio: ^5.4.1
   http: ^1.2.0
+  connectivity_plus: ^6.0.5
+
+  # On-device AI (llama.cpp GGUF - replaces flutter_gemma)
+  llamadart: ^0.1.0
+
+  # File & Storage
+  path_provider: ^2.1.2
+  file_picker: ^8.1.7
+
+  # UI
   google_fonts: ^6.2.1
-  markdown_widget: ^2.0.0
   flutter_markdown: ^0.6.14+1
   flutter_spinkit: ^5.2.0
-  path_provider: ^2.1.2
-  flutter_gemma: ^0.12.8
-  uuid: ^4.2.2
-  dio: ^5.4.1
-  intl: ^0.19.0
-  lottie: ^3.1.0
   flutter_animate: ^4.5.0
+  lottie: ^3.1.0
 
-  # For offline fallback dataset
+  # Utilities
+  uuid: ^4.2.2
+  intl: ^0.19.0
   json_annotation: ^4.9.0
-  # Add any other needed packages
 
 dev_dependencies:
   flutter_test:

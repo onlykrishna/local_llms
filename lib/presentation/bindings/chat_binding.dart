@@ -6,24 +6,23 @@ import '../../core/services/settings_service.dart';
 import '../../data/repositories/chat_repository_impl.dart';
 import '../../domain/entities/chat_message.dart';
 import '../../domain/repositories/chat_repository.dart';
+import '../../domain/services/inference_router.dart';
+import '../../domain/services/domain_service.dart';
 import '../controllers/chat_controller.dart';
 import '../../core/constants/app_constants.dart';
-import '../../core/services/hardware_inference_service.dart';
-import '../../core/services/settings_service.dart';
 
 class ChatBinding extends Bindings {
   @override
   void dependencies() {
-    // Repository
+    // Repository (keep existing Ollama+Hive repo for history/fallback)
     final ChatRepository repository = ChatRepositoryImpl(
       OllamaClient(),
       Get.find<FallbackDatasetService>(),
-      Get.find<HardwareInferenceService>(),
       Hive.box<ChatMessage>(AppConstants.chatBoxName),
     );
     Get.put<ChatRepository>(repository);
 
-    // Controller
+    // Controller (now uses InferenceRouterService)
     Get.put(ChatController(repository));
   }
 }

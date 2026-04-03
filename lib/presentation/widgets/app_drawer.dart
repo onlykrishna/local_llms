@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../core/services/settings_service.dart';
+import '../../domain/services/inference_router.dart';
+import '../../domain/services/domain_service.dart';
 import '../controllers/chat_controller.dart';
 import '../pages/history_page.dart';
 import '../pages/settings_page.dart';
-import '../../core/services/hardware_inference_service.dart';
+import '../screens/model_setup_screen.dart';
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
@@ -13,17 +15,28 @@ class AppDrawer extends StatelessWidget {
   Widget build(BuildContext context) {
     final settings = Get.find<SettingsService>();
     final controller = Get.find<ChatController>();
-    final hardware = Get.find<HardwareInferenceService>();
+    final router = Get.find<InferenceRouterService>();
+    final domainService = Get.find<DomainService>();
 
     return Drawer(
       child: Column(
         children: [
           _buildHeader(context),
-          _buildAIUpgradeSection(context, hardware, controller),
+          // Backend status card
+          Obx(() => _BackendCard(backend: router.currentBackend.value)),
           const Divider(),
           ListTile(
+            leading: const Icon(Icons.memory_rounded, color: Colors.indigoAccent),
+            title: const Text('AI Model Setup'),
+            subtitle: const Text('Download Llama 3.2 1B'),
+            onTap: () {
+              Get.back();
+              Get.to(() => const ModelSetupScreen());
+            },
+          ),
+          ListTile(
             leading: const Icon(Icons.history_rounded, color: Colors.blueAccent),
-            title: const Text('View Chat History'),
+            title: const Text('Chat History'),
             onTap: () {
               Get.back();
               Get.to(() => const HistoryPage());
@@ -31,38 +44,38 @@ class AppDrawer extends StatelessWidget {
           ),
           ListTile(
             leading: const Icon(Icons.settings, color: Colors.indigoAccent),
-            title: const Text('AI Configuration'),
+            title: const Text('Settings'),
             onTap: () {
               Get.back();
               Get.to(() => const SettingsPage());
             },
           ),
           Obx(() => ListTile(
-            leading: Icon(
-              settings.isDarkMode.value ? Icons.dark_mode : Icons.light_mode,
-              color: Colors.orangeAccent,
-            ),
-            title: const Text('Dark Mode'),
-            trailing: Switch(
-              value: settings.isDarkMode.value,
-              onChanged: (_) => settings.toggleDarkMode(),
-            ),
-          )),
-          const Spacer(),
+                leading: Icon(
+                  settings.isDarkMode.value ? Icons.dark_mode : Icons.light_mode,
+                  color: Colors.orangeAccent,
+                ),
+                title: const Text('Dark Mode'),
+                trailing: Switch(
+                  value: settings.isDarkMode.value,
+                  onChanged: (_) => settings.toggleDarkMode(),
+                ),
+              )),
           const Divider(),
           ListTile(
-            leading: const Icon(Icons.delete_sweep_outlined, color: Colors.redAccent),
-            title: const Text('Clear Chat History'),
-            onTap: () {
-              _showConfirmClear(context, controller);
-            },
+            leading: const Icon(Icons.delete_outline, color: Colors.redAccent),
+            title: const Text('Clear Chat'),
+            onTap: () => controller.clearChat(),
           ),
-          const SizedBox(height: 12),
-          Text(
-            'Offline AI v1.0.0',
-            style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
+          const Spacer(),
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text(
+              'Selective Inference v2.0\nHealth · Bollywood · Education · General',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 10, color: Colors.grey),
+            ),
           ),
-          const SizedBox(height: 24),
         ],
       ),
     );
@@ -72,168 +85,89 @@ class AppDrawer extends StatelessWidget {
     return DrawerHeader(
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [Theme.of(context).primaryColor, Colors.blue.shade800],
+          colors: [Colors.indigo.shade800, Colors.deepPurple.shade700],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
       ),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const CircleAvatar(
-              radius: 36,
-              backgroundColor: Colors.white24,
-              child: Icon(Icons.auto_awesome, color: Colors.white, size: 40),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Local Intelligence',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: const [
+          CircleAvatar(
+            radius: 24,
+            backgroundColor: Colors.white24,
+            child: Icon(Icons.psychology, color: Colors.white, size: 28),
+          ),
+          SizedBox(height: 12),
+          Text('Offline AI',
               style: TextStyle(
-                color: Colors.white.withOpacity(0.9),
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-              ),
-            ),
-          ],
-        ),
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold)),
+          Text('3-Layer Selective Inference',
+              style: TextStyle(color: Colors.white70, fontSize: 11)),
+        ],
       ),
     );
   }
+}
 
-  Widget _buildAIUpgradeSection(BuildContext context, HardwareInferenceService hardware, ChatController chatController) {
-    return Obx(() {
-      if (chatController.isHardwareReady.value) {
-        return Container(
-          width: double.infinity,
-          margin: const EdgeInsets.all(12),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.teal.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.teal.withOpacity(0.3)),
+class _BackendCard extends StatelessWidget {
+  final InferenceBackend backend;
+  const _BackendCard({required this.backend});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: _color.withAlpha(25),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _color.withAlpha(80)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 10, height: 10,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: _color),
           ),
-          child: Row(
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.flash_on, color: Colors.teal),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    Text('Hardware AI Active', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                    Text('Gemma 2B is powering your responses.', style: TextStyle(fontSize: 11)),
-                  ],
-                ),
-              ),
+              Text(_label,
+                  style: TextStyle(fontWeight: FontWeight.bold, color: _color, fontSize: 13)),
+              Text(_subtitle, style: const TextStyle(fontSize: 10, color: Colors.grey)),
             ],
           ),
-        );
-      }
-
-      return Container(
-        margin: const EdgeInsets.all(12),
-        width: double.infinity,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          gradient: LinearGradient(
-            colors: [Colors.indigo.shade400, Colors.deepPurple.shade600],
-          ),
-        ),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () => _handleUpgrade(context, hardware, chatController),
-            borderRadius: BorderRadius.circular(12),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-              child: Row(
-                children: [
-                  const Icon(Icons.psychology, color: Colors.white),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        Text('Enable Pro Offline AI', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                        Text('One-click download (~1GB)', style: TextStyle(color: Colors.white70, fontSize: 11)),
-                      ],
-                    ),
-                  ),
-                  const Icon(Icons.chevron_right, color: Colors.white54),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-    });
-  }
-
-  void _handleUpgrade(BuildContext context, HardwareInferenceService hardware, ChatController chatController) {
-    final RxDouble progress = 0.0.obs;
-    final RxString status = 'Downloading AI Brain...'.obs;
-
-    Get.bottomSheet(
-      Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.cloud_download, size: 48, color: Colors.indigo),
-            const SizedBox(height: 16),
-            Obx(() => Text(status.value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18))),
-            const SizedBox(height: 24),
-            Obx(() => LinearProgressIndicator(
-              value: progress.value / 100,
-              backgroundColor: Colors.indigo.withOpacity(0.1),
-              valueColor: const AlwaysStoppedAnimation<Color>(Colors.indigo),
-            )),
-            const SizedBox(height: 12),
-            Obx(() => Text('${progress.value.toInt()}% complete', style: const TextStyle(color: Colors.grey))),
-            const SizedBox(height: 24),
-            const Text(
-              'Once complete, the app will run real AI inference directly on your phone.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-          ],
-        ),
+        ],
       ),
-      isDismissible: false,
-      enableDrag: false,
     );
-
-    hardware.installRealAIBrain(
-      onProgress: (p) {
-        progress.value = p.toDouble();
-        if (p >= 100) status.value = 'Installation Complete!';
-      },
-    ).then((_) {
-      chatController.isHardwareReady.value = true;
-      Get.back(); // close bottom sheet
-      Get.snackbar('Success', 'AI Brain installed! You are now in Full Offline Power mode.', 
-        snackPosition: SnackPosition.TOP, backgroundColor: Colors.teal, colorText: Colors.white);
-    }).catchError((e) {
-      Get.back();
-      Get.snackbar('Error', e.toString(), 
-        snackPosition: SnackPosition.BOTTOM, backgroundColor: Colors.redAccent, colorText: Colors.white);
-    });
   }
 
-  void _showConfirmClear(BuildContext context, ChatController controller) {
-    Get.defaultDialog(
-      title: 'Clear History?',
-      middleText: 'This will delete all messages locally.',
-      textConfirm: 'Delete',
-      textCancel: 'Cancel',
-      confirmTextColor: Colors.white,
-      buttonColor: Colors.red,
-      onConfirm: () => controller.clearChat(),
-    );
+  Color get _color {
+    switch (backend) {
+      case InferenceBackend.gemini:   return Colors.green;
+      case InferenceBackend.ollama:   return Colors.blue;
+      case InferenceBackend.onDevice: return Colors.orange;
+    }
+  }
+
+  String get _label {
+    switch (backend) {
+      case InferenceBackend.gemini:   return 'Online (Gemini Flash)';
+      case InferenceBackend.ollama:   return 'Ollama LAN';
+      case InferenceBackend.onDevice: return 'On-device AI';
+    }
+  }
+
+  String get _subtitle {
+    switch (backend) {
+      case InferenceBackend.gemini:   return 'Free tier · 1M tokens/day';
+      case InferenceBackend.ollama:   return 'Local LAN server';
+      case InferenceBackend.onDevice: return 'Llama 3.2 1B — 100% offline';
+    }
   }
 }
