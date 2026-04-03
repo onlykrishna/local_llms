@@ -29,7 +29,8 @@ class SettingsService extends GetxService {
     useOfflineMode.value = _storage.read(AppConstants.useOfflineModeKey)  ?? false;
     ollamaIp.value       = _storage.read('ollama_ip')                     ?? '192.168.1.100';
     ollamaPort.value     = _storage.read('ollama_port')                   ?? '11434';
-    geminiApiKey.value   = _storage.read('gemini_api_key')                ?? '';
+    // NOTE: This default key is for temporary testing; location will change later.
+    geminiApiKey.value   = _storage.read('gemini_api_key')                ?? 'AIzaSyDDYJ4mG_ZL1EDKjlV5EfwVpbKbqyO9jug';
     contextWindow.value  = _storage.read('context_window')                ?? 6;
     streamDelayMs.value  = _storage.read('stream_delay_ms')               ?? 0;
     return this;

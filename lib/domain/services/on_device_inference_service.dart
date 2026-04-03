@@ -96,6 +96,10 @@ class OnDeviceInferenceService extends GetxService {
 
   /// Streams response tokens from on-device llama.cpp.
   Stream<String> respond(String userMessage, String systemPrompt, String domainName) async* {
+    if (!_isInitialized) {
+      yield '⏳ Loading on-device AI for the first time (may take 5-15s)...';
+    }
+
     final ok = await _ensureInitialized(domainName);
     if (!ok || _backend == null || _contextHandle == null || _modelHandle == null) {
       yield '⚠️ Local model not found or failed to load. Please go to the Model Setup screen to download Llama 3.2 1B (~650 MB).';
