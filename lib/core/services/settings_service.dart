@@ -6,76 +6,63 @@ import '../constants/app_constants.dart';
 class SettingsService extends GetxService {
   final _storage = GetStorage();
 
-  // Model & UI
-  final RxString selectedModel = 'mistral'.obs; // We keep the variable name for now as it's used elsewhere
-  final RxBool isDarkMode = true.obs;
-  final RxBool useOfflineMode = false.obs;
-
-  // Ollama connection
-  final RxString ollamaIp = '192.168.1.100'.obs;
-  final RxString ollamaPort = '11434'.obs;
-
-  // Gemini API
-  final RxString geminiApiKey = ''.obs;
-
-  // Chat behaviour
-  final RxInt contextWindow = 6.obs;
-  final RxInt streamDelayMs = 0.obs;
+  final ollamaIp = '192.168.1.100'.obs;
+  final ollamaPort = '11434'.obs;
+  final geminiApiKey = ''.obs;
+  final isDarkMode = false.obs;
+  final contextWindow = 10.obs;
+  
+  // Model path for llamadart (GGUF)
+  final selectedModel = ''.obs; // Empty by default to trigger 'Not configured' UI
 
   Future<SettingsService> init() async {
-    // UPDATED to use AppConstants.modelPathKey ('model_path')
-    selectedModel.value  = _storage.read(AppConstants.modelPathKey)      ?? 'mistral';
-    isDarkMode.value     = _storage.read(AppConstants.isDarkModeKey)      ?? true;
-    useOfflineMode.value = _storage.read(AppConstants.useOfflineModeKey)  ?? false;
-    ollamaIp.value       = _storage.read('ollama_ip')                     ?? '192.168.1.100';
-    ollamaPort.value     = _storage.read('ollama_port')                   ?? '11434';
-    // Option B: Read from --dart-define at build time (most secure)
-    // Build with: flutter build apk --dart-define=GEMINI_KEY=your_key_here
-    geminiApiKey.value   = _storage.read('gemini_api_key') ?? 
-        const String.fromEnvironment('GEMINI_KEY', defaultValue: '');
-    contextWindow.value  = _storage.read('context_window')                ?? 6;
-    streamDelayMs.value  = _storage.read('stream_delay_ms')               ?? 0;
+    ollamaIp.value = _storage.read('ollama_ip') ?? '192.168.1.100';
+    ollamaPort.value = _storage.read('ollama_port') ?? '11434';
+    
+    // Use environment define as fallback for release builds
+    const envKey = String.fromEnvironment('GEMINI_KEY');
+    geminiApiKey.value = _storage.read('gemini_key') ?? envKey;
+    
+    isDarkMode.value = _storage.read('is_dark_mode') ?? false;
+    contextWindow.value = _storage.read('context_window') ?? 10;
+    selectedModel.value = _storage.read(AppConstants.modelPathKey) ?? '';
+    
+    _applyTheme();
     return this;
   }
 
-  void updateModel(String model) {
-    selectedModel.value = model;
-    _storage.write(AppConstants.modelPathKey, model); // UPDATED to model_path key
+  void updateOllamaIp(String val) {
+    ollamaIp.value = val;
+    _storage.write('ollama_ip', val);
   }
 
-  void toggleDarkMode() {
-    isDarkMode.value = !isDarkMode.value;
-    _storage.write(AppConstants.isDarkModeKey, isDarkMode.value);
+  void updateOllamaPort(String val) {
+    ollamaPort.value = val;
+    _storage.write('ollama_port', val);
+  }
+
+  void updateGeminiKey(String val) {
+    geminiApiKey.value = val;
+    _storage.write('gemini_key', val);
+  }
+
+  void updateModel(String path) {
+    selectedModel.value = path;
+    _storage.write(AppConstants.modelPathKey, path);
+  }
+
+  void toggleDarkMode(bool val) {
+    isDarkMode.value = val;
+    _storage.write('is_dark_mode', val);
+    _applyTheme();
+  }
+
+  void updateContextWindow(int count) {
+    contextWindow.value = count;
+    _storage.write('context_window', count);
+  }
+
+  void _applyTheme() {
     Get.changeThemeMode(isDarkMode.value ? ThemeMode.dark : ThemeMode.light);
-  }
-
-  void toggleOfflineMode() {
-    useOfflineMode.value = !useOfflineMode.value;
-    _storage.write(AppConstants.useOfflineModeKey, useOfflineMode.value);
-  }
-
-  void updateOllamaIp(String ip) {
-    ollamaIp.value = ip;
-    _storage.write('ollama_ip', ip);
-  }
-
-  void updateOllamaPort(String port) {
-    ollamaPort.value = port;
-    _storage.write('ollama_port', port);
-  }
-
-  void updateGeminiKey(String key) {
-    geminiApiKey.value = key;
-    _storage.write('gemini_api_key', key);
-  }
-
-  void updateContextWindow(int val) {
-    contextWindow.value = val;
-    _storage.write('context_window', val);
-  }
-
-  void updateStreamDelay(int ms) {
-    streamDelayMs.value = ms;
-    _storage.write('stream_delay_ms', ms);
   }
 }

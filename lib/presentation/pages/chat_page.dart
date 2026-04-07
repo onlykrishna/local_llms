@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -12,11 +13,12 @@ class ChatPage extends GetView<ChatController> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Column(
       children: [
-        // Slim 28px backend + domain bar
+        const SizedBox(height: 100), // Spacing for transparent appbar if needed
         const BackendStatusBar(),
-        // Chat messages
+        
         Expanded(
           child: Obx(() => ListView.builder(
             controller: controller.scrollController,
@@ -27,7 +29,7 @@ class ChatPage extends GetView<ChatController> {
             itemBuilder: (context, index) {
               if (index == 0 && controller.isGenerating.value) {
                 if (controller.currentResponseText.value.isEmpty) {
-                  return Animate(child: TypingIndicator())
+                  return Animate(child: const TypingIndicator())
                       .fadeIn(duration: 400.ms)
                       .slideY(begin: 0.1, end: 0);
                 } else {
@@ -44,72 +46,69 @@ class ChatPage extends GetView<ChatController> {
             },
           )),
         ),
-        // Domain chips + input
         _buildInputArea(context),
       ],
     );
   }
 
   Widget _buildInputArea(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context).scaffoldBackgroundColor,
+        color: theme.colorScheme.surface,
         border: Border(
-          top: BorderSide(
-              color: Theme.of(context).dividerColor.withOpacity(0.1)),
+          top: BorderSide(color: theme.colorScheme.outline.withOpacity(0.2)),
         ),
       ),
       child: SafeArea(
         child: Column(
           children: [
-            // Domain selector row
             const DomainSelector(),
-            // Input row
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
               child: Row(
                 children: [
                   Expanded(
-                    child: TextField(
-                      controller: controller.inputController,
-                      maxLines: 4,
-                      minLines: 1,
-                      textInputAction: TextInputAction.send,
-                      onSubmitted: (_) => controller.sendMessage(),
-                      decoration: InputDecoration(
-                        hintText: 'Ask anything...',
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 12),
-                        filled: true,
-                        fillColor: Theme.of(context)
-                            .colorScheme
-                            .surfaceVariant
-                            .withOpacity(0.3),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(24),
-                          borderSide: BorderSide.none,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainer,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: theme.colorScheme.outline.withOpacity(0.5)),
+                      ),
+                      child: TextField(
+                        controller: controller.inputController,
+                        maxLines: 4,
+                        minLines: 1,
+                        style: TextStyle(color: theme.colorScheme.onSurface),
+                        textInputAction: TextInputAction.send,
+                        onSubmitted: (_) => controller.sendMessage(),
+                        decoration: InputDecoration(
+                          hintText: 'Synthesizing with local knowledge...',
+                          hintStyle: TextStyle(color: theme.colorScheme.onSurfaceVariant.withOpacity(0.5), fontSize: 13),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          border: InputBorder.none,
+                          filled: false,
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  // Send / Stop FAB
-                  Obx(() => FloatingActionButton.small(
-                        heroTag: 'chat_send_btn',
-                        backgroundColor: controller.isGenerating.value
-                            ? Colors.red
-                            : Theme.of(context).colorScheme.primary,
-                        elevation: 0,
-                        onPressed: controller.isGenerating.value
-                            ? controller.stopGeneration
-                            : controller.sendMessage,
-                        child: Icon(
-                          controller.isGenerating.value
-                              ? Icons.stop_rounded
-                              : Icons.send_rounded,
-                          color: Colors.white,
-                        ),
-                      )),
+                  const SizedBox(width: 12),
+                  Obx(() => FloatingActionButton(
+                    heroTag: 'chat_send_btn',
+                    mini: true,
+                    backgroundColor: controller.isGenerating.value
+                        ? theme.colorScheme.error
+                        : theme.colorScheme.primary,
+                    onPressed: controller.isGenerating.value
+                        ? controller.stopGeneration
+                        : controller.sendMessage,
+                    child: Icon(
+                      controller.isGenerating.value
+                          ? Icons.stop_rounded
+                          : Icons.send_rounded,
+                      color: theme.colorScheme.onPrimary,
+                    ),
+                  )),
                 ],
               ),
             ),
@@ -126,38 +125,55 @@ class _StreamingBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Align(
       alignment: Alignment.centerLeft,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            CircleAvatar(
-              radius: 16,
-              backgroundColor: Colors.indigo.shade700,
-              child: const Icon(Icons.auto_awesome, size: 16, color: Colors.white),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.auto_awesome, size: 16, color: theme.colorScheme.primary),
             ),
             const SizedBox(width: 8),
             Flexible(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: BoxDecoration(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .surfaceVariant
-                      .withOpacity(0.4),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    topRight: Radius.circular(16),
-                    bottomRight: Radius.circular(16),
-                    bottomLeft: Radius.circular(4),
+              child: ClipRRect(
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  topRight: Radius.circular(16),
+                  bottomRight: Radius.circular(16),
+                  bottomLeft: Radius.circular(4),
+                ),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainer.withOpacity(0.8),
+                      border: Border.all(color: theme.colorScheme.outline.withOpacity(0.3)),
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(16),
+                        topRight: Radius.circular(16),
+                        bottomRight: Radius.circular(16),
+                        bottomLeft: Radius.circular(4),
+                      ),
+                    ),
+                    child: Obx(() => Text(
+                      controller.currentResponseText.value,
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurface,
+                        fontSize: 15,
+                        height: 1.6,
+                      ),
+                    )),
                   ),
                 ),
-                child: Obx(() => Text(
-                      controller.currentResponseText.value,
-                      style: const TextStyle(fontSize: 15, height: 1.4),
-                    )),
               ),
             ),
           ],

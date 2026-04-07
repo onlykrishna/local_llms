@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import '../../data/datasources/gemini_datasource.dart';
 import '../../core/services/settings_service.dart';
@@ -36,34 +37,57 @@ class InferenceRouterService extends GetxService {
   }
 
   /// Probe Ollama with 1.5-second timeout.
+  /// Use a fresh Dio instance to avoid any global config lock.
   Future<bool> _isOllamaReachable() async {
     try {
       final ip = _settings.ollamaIp.value;
       final port = _settings.ollamaPort.value;
-      final resp = await _dio
-          .get('http://$ip:$port/api/tags')
-          .timeout(const Duration(milliseconds: 1500));
+      final probeDio = Dio();
+      final resp = await probeDio.get(
+        'http://$ip:$port/api/tags',
+        options: Options(
+          sendTimeout: const Duration(milliseconds: 1500),
+          connectTimeout: const Duration(milliseconds: 1500),
+          receiveTimeout: const Duration(milliseconds: 1500),
+        ),
+      );
       return resp.statusCode == 200;
-    } catch (_) {
+    } catch (e) {
+      print('>>> ROUTER: Ollama probe failed: $e');
       return false;
     }
   }
 
   Future<bool> _hasInternet() async {
     final result = await Connectivity().checkConnectivity();
-    return result.isNotEmpty && !result.every((r) => r == ConnectivityResult.none);
+    final hasInternet = result.isNotEmpty && !result.every((r) => r == ConnectivityResult.none);
+    print('>>> ROUTER: has internet = $hasInternet ($result)');
+    return hasInternet;
   }
 
   Future<InferenceBackend> _resolveBackend() async {
-    // 1. Try Ollama LAN
-    if (await _isOllamaReachable()) {
+    print('>>> ROUTER: Resolving backend...');
+    
+    // Layer 1: Try Ollama LAN
+    final ollamaReady = await _isOllamaReachable();
+    print('>>> ROUTER: Ollama reachable = $ollamaReady');
+    if (ollamaReady) {
+      print('>>> ROUTER: Selected OLLAMA');
       return InferenceBackend.ollama;
     }
-    // 2. Internet → Gemini
-    if (await _hasInternet() && _settings.geminiApiKey.value.isNotEmpty) {
+
+    // Layer 2: Internet → Gemini
+    final hasInternet = await _hasInternet();
+    final hasGeminiKey = _settings.geminiApiKey.value.isNotEmpty;
+    print('>>> ROUTER: Gemini Key present = $hasGeminiKey');
+    
+    if (hasInternet && hasGeminiKey) {
+      print('>>> ROUTER: Selected GEMINI');
       return InferenceBackend.gemini;
     }
-    // 3. On-device
+
+    // Layer 3: On-device
+    print('>>> ROUTER: Selected ON_DEVICE (Fallback)');
     return InferenceBackend.onDevice;
   }
 
@@ -73,8 +97,11 @@ class InferenceRouterService extends GetxService {
     required String systemPrompt,
     required List<Map<String, dynamic>> history,
   }) async* {
+    yield '⏳ Routing request...';
+    
     final backend = await _resolveBackend();
     currentBackend.value = backend;
+    print('>>> ROUTER: backend = ${currentBackend.value}');
 
     final domainName = _domainService.selectedDomain.value.name;
 
@@ -92,10 +119,11 @@ class InferenceRouterService extends GetxService {
           );
         } on GeminiRateLimitException {
           // Fallback to on-device
+          print('>>> ROUTER: Gemini rate limit! Falling back to OnDevice');
           currentBackend.value = InferenceBackend.onDevice;
           yield* _onDevice.respond(userMessage, systemPrompt, domainName);
         } catch (e) {
-             yield '\n[Gemini Error: $e]. Falling back...';
+             print('>>> ROUTER: Gemini error: $e. Falling back to OnDevice');
              currentBackend.value = InferenceBackend.onDevice;
              yield* _onDevice.respond(userMessage, systemPrompt, domainName);
         }

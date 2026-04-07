@@ -1,7 +1,7 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import '../../domain/entities/chat_message.dart';
 
@@ -21,7 +21,7 @@ class MessageBubble extends StatelessWidget {
     final isMe = message.isUser;
     
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
         crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
@@ -29,63 +29,71 @@ class MessageBubble extends StatelessWidget {
             mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              if (!isMe) _buildAvatar(theme),
+              if (!isMe) _buildAvatar(theme, isMe),
               const SizedBox(width: 8),
               Flexible(
                 child: GestureDetector(
                   onLongPress: () => _copyToClipboard(context, message.content),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      gradient: isMe ? _userGradient() : null,
-                      color: isMe ? null : theme.colorScheme.surfaceVariant.withOpacity(0.4),
-                      borderRadius: _bubbleBorderRadius(isMe),
-                      boxShadow: isMe ? [
-                        BoxShadow(
-                          color: Colors.blue.withOpacity(0.2),
-                          blurRadius: 8,
-                          offset: const Offset(2, 4),
-                        )
-                      ] : null,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        MarkdownBody(
-                          data: message.content,
-                          styleSheet: MarkdownStyleSheet(
-                            p: TextStyle(
-                              color: isMe ? Colors.white : theme.textTheme.bodyLarge?.color,
-                              fontSize: 15,
-                              height: 1.4,
-                            ),
-                            code: TextStyle(
-                              backgroundColor: Colors.black.withOpacity(0.05),
-                              fontFamily: 'monospace',
-                              fontSize: 13,
-                              color: isMe ? Colors.white70 : Colors.tealAccent.shade400,
-                            ),
-                            codeblockDecoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
+                  child: ClipRRect(
+                    borderRadius: _bubbleBorderRadius(isMe),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          gradient: isMe ? _userGradient(theme) : null,
+                          color: isMe ? null : theme.colorScheme.surfaceContainer.withOpacity(0.8),
+                          borderRadius: _bubbleBorderRadius(isMe),
+                          border: Border.all(
+                            color: isMe 
+                                ? Colors.white.withOpacity(0.1) 
+                                : theme.colorScheme.outline.withOpacity(0.2),
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          DateFormat('hh:mm a').format(message.timestamp),
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: isMe ? Colors.white70 : theme.hintColor,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            MarkdownBody(
+                              data: message.content,
+                              styleSheet: MarkdownStyleSheet(
+                                p: TextStyle(
+                                  color: isMe ? Colors.white : theme.colorScheme.onSurface,
+                                  fontSize: 15,
+                                  height: 1.6,
+                                ),
+                                code: TextStyle(
+                                  backgroundColor: isMe ? Colors.black26 : theme.colorScheme.primary.withOpacity(0.1),
+                                  fontFamily: 'monospace',
+                                  fontSize: 13,
+                                  color: isMe ? Colors.white : theme.colorScheme.primary,
+                                ),
+                                codeblockDecoration: BoxDecoration(
+                                  color: isMe ? Colors.black38 : theme.colorScheme.surfaceContainer.withOpacity(0.5),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              DateFormat('hh:mm').format(message.timestamp),
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                                color: isMe 
+                                    ? Colors.white.withOpacity(0.5) 
+                                    : theme.colorScheme.onSurfaceVariant.withOpacity(0.5),
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
               ),
               const SizedBox(width: 8),
-              if (isMe) _buildAvatar(theme),
+              if (isMe) _buildAvatar(theme, isMe),
             ],
           ),
         ],
@@ -93,21 +101,28 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
-  Widget _buildAvatar(ThemeData theme) {
-    return CircleAvatar(
-      radius: 16,
-      backgroundColor: message.isUser ? theme.primaryColor : Colors.teal.shade700,
+  Widget _buildAvatar(ThemeData theme, bool isMe) {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary.withOpacity(0.1),
+        shape: BoxShape.circle,
+        border: Border.all(color: theme.colorScheme.primary.withOpacity(0.2)),
+      ),
       child: Icon(
-        message.isUser ? Icons.person : Icons.auto_awesome,
-        size: 16,
-        color: Colors.white,
+        isMe ? Icons.person_rounded : Icons.auto_awesome_rounded,
+        size: 14,
+        color: theme.colorScheme.primary,
       ),
     );
   }
 
-  LinearGradient _userGradient() {
-    return const LinearGradient(
-      colors: [Color(0xFF4A90E2), Color(0xFF357ABD)],
+  LinearGradient _userGradient(ThemeData theme) {
+    final isDark = theme.brightness == Brightness.dark;
+    return LinearGradient(
+      colors: isDark 
+        ? [const Color(0xFF5D38BB), const Color(0xFF2E1A47)] 
+        : [theme.colorScheme.primary, theme.colorScheme.primary.withOpacity(0.8)],
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
     );
@@ -125,7 +140,11 @@ class MessageBubble extends StatelessWidget {
   void _copyToClipboard(BuildContext context, String text) {
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Message copied!'), duration: Duration(seconds: 1)),
+      const SnackBar(
+        content: Text('Message copied to neural buffer'),
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 1),
+      ),
     );
   }
 }

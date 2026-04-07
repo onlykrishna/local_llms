@@ -43,3 +43,22 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# AI Models & Large Binaries
+*.gguf
+*.bin
+models/
+
+# Sensitive Data
+.env
+.env.local
+**/keys/
+sensitive_config/
+*.log
+
+# Debug Artifacts
+/scripts/logs/
+/tmp/
+*.apk
+!lib/presentation/assets/images/placeholder.png 
+

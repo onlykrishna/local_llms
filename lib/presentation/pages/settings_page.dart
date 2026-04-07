@@ -1,184 +1,321 @@
+import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../core/services/settings_service.dart';
 import '../screens/model_setup_screen.dart';
 
-class SettingsPage extends StatelessWidget {
-  const SettingsPage({super.key});
+class SettingsPage extends StatefulWidget {
+  const SettingsPage({Key? key}) : super(key: key);
+
+  @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  final SettingsService s = Get.find<SettingsService>();
+
+  late TextEditingController ollamaIpCtrl;
+  late TextEditingController ollamaPortCtrl;
+  late TextEditingController geminiKeyCtrl;
+
+  final RxString connectionResult = ''.obs;
+  final RxBool obscureKey = true.obs;
+
+  @override
+  void initState() {
+    super.initState();
+    ollamaIpCtrl = TextEditingController(text: s.ollamaIp.value);
+    ollamaPortCtrl = TextEditingController(text: s.ollamaPort.value);
+    geminiKeyCtrl = TextEditingController(text: s.geminiApiKey.value);
+  }
+
+  @override
+  void dispose() {
+    ollamaIpCtrl.dispose();
+    ollamaPortCtrl.dispose();
+    geminiKeyCtrl.dispose();
+    super.dispose();
+  }
+
+  void _unfocus() => FocusScope.of(context).unfocus();
 
   @override
   Widget build(BuildContext context) {
-    final s = Get.find<SettingsService>();
-    final ollamaIpCtrl = TextEditingController(text: s.ollamaIp.value);
-    final ollamaPortCtrl = TextEditingController(text: s.ollamaPort.value);
-    final geminiKeyCtrl = TextEditingController(text: s.geminiApiKey.value);
-    final RxString connectionResult = ''.obs;
-    final RxBool obscureKey = true.obs;
-
+    final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings'), centerTitle: true),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // ── AI Backend ─────────────────────────────────────────
-          _header('AI Backend'),
-          TextField(
-            controller: ollamaIpCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Ollama IP Address',
-              hintText: '192.168.1.100',
-              prefixIcon: Icon(Icons.lan_rounded),
-            ),
-            onChanged: s.updateOllamaIp,
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: ollamaPortCtrl,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Ollama Port',
-              hintText: '11434',
-              prefixIcon: Icon(Icons.settings_ethernet),
-            ),
-            onChanged: s.updateOllamaPort,
-          ),
-          const SizedBox(height: 8),
-          Obx(() => ElevatedButton.icon(
-                icon: const Icon(Icons.network_check_rounded),
-                label: const Text('Test Ollama Connection'),
-                onPressed: () async {
-                  connectionResult.value = 'Testing...';
-                  try {
-                    final stopwatch = Stopwatch()..start();
-                    await Dio().get(
-                      'http://${s.ollamaIp.value}:${s.ollamaPort.value}/api/tags',
-                      options: Options(receiveTimeout: const Duration(milliseconds: 2000)),
-                    );
-                    stopwatch.stop();
-                    connectionResult.value =
-                        '✅ Ollama reachable (${stopwatch.elapsedMilliseconds}ms)';
-                  } catch (e) {
-                    connectionResult.value = '❌ Unreachable: $e';
-                  }
-                },
-              )),
-          Obx(() => connectionResult.value.isEmpty
-              ? const SizedBox.shrink()
-              : Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(connectionResult.value,
-                      style: TextStyle(
-                          color: connectionResult.value.startsWith('✅')
-                              ? Colors.green
-                              : Colors.red,
-                          fontSize: 12)),
-                )),
-          const SizedBox(height: 16),
-          Obx(() => TextField(
-                controller: geminiKeyCtrl,
-                obscureText: obscureKey.value,
-                decoration: InputDecoration(
-                  labelText: 'Gemini API Key (optional)',
-                  hintText: 'Get free key at aistudio.google.com',
-                  prefixIcon: const Icon(Icons.key_rounded),
-                  suffixIcon: IconButton(
-                    icon: Icon(obscureKey.value
-                        ? Icons.visibility
-                        : Icons.visibility_off),
-                    onPressed: () => obscureKey.value = !obscureKey.value,
-                  ),
-                ),
-                onChanged: s.updateGeminiKey,
-              )),
-          const Padding(
-            padding: EdgeInsets.only(top: 4, bottom: 16),
-            child: Text(
-              'Free quota: 15 req/min · 1M tokens/day',
-              style: TextStyle(fontSize: 10, color: Colors.grey),
-            ),
-          ),
+      backgroundColor: theme.colorScheme.surface,
+      appBar: AppBar(
+        title: const Text('Neural Config'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+          onPressed: () => Get.back(),
+        ),
+      ),
+      body: GestureDetector(
+        onTap: _unfocus,
+        child: ListView(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          children: [
+            const _SectionHeader(title: 'AI BACKEND'),
+            const SizedBox(height: 20),
 
-          const Divider(),
-          // ── On-device Model ───────────────────────────────────
-          _header('On-device Model'),
-          ListTile(
-            leading: const Icon(Icons.memory_rounded, color: Colors.indigo),
-            title: const Text('Model File'),
-            subtitle: Obx(() => Text(
-              s.useOfflineMode.value ? 'Configured' : 'Not configured',
-              style: TextStyle(
-                  color: s.useOfflineMode.value ? Colors.green : Colors.grey),
+            _buildTextField(
+              context: context,
+              controller: ollamaIpCtrl,
+              label: 'Ollama IP Address',
+              hint: 'e.g. 192.168.1.100',
+              icon: Icons.lan_rounded,
+              onChanged: s.updateOllamaIp,
+            ),
+            const SizedBox(height: 16),
+            _buildTextField(
+              context: context,
+              controller: ollamaPortCtrl,
+              label: 'Ollama Port',
+              hint: 'e.g. 11434',
+              icon: Icons.swap_horiz_rounded,
+              onChanged: s.updateOllamaPort,
+            ),
+            
+            const SizedBox(height: 20),
+            _buildConnectionTester(theme),
+
+            const SizedBox(height: 40),
+            const _SectionHeader(title: 'GEMINI CLOUD'),
+            const SizedBox(height: 20),
+
+            Obx(() => _buildTextField(
+              context: context,
+              controller: geminiKeyCtrl,
+              label: 'Gemini API Key',
+              hint: 'Enter your AI Studio key',
+              icon: Icons.key_rounded,
+              obscureText: obscureKey.value,
+              suffix: IconButton(
+                icon: Icon(obscureKey.value ? Icons.visibility_off_rounded : Icons.visibility_rounded, size: 20, color: theme.colorScheme.onSurfaceVariant),
+                onPressed: () => obscureKey.toggle(),
+              ),
+              onChanged: s.updateGeminiKey,
             )),
-            trailing: OutlinedButton(
-              onPressed: () => Get.to(() => const ModelSetupScreen()),
-              child: const Text('Manage'),
+
+            const SizedBox(height: 40),
+            const _SectionHeader(title: 'LOCAL COMPUTE'),
+            const SizedBox(height: 20),
+
+            _buildModelCard(theme),
+
+            const SizedBox(height: 40),
+            const _SectionHeader(title: 'PREFERENCES'),
+            const SizedBox(height: 20),
+
+            Obx(() => _buildToggle(
+              context: context,
+              title: 'Aetheric Glow',
+              subtitle: 'Enhanced OLED dark mode',
+              value: s.isDarkMode.value,
+              onChanged: s.toggleDarkMode,
+              icon: s.isDarkMode.value ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+            )),
+            
+            const SizedBox(height: 24),
+            Obx(() => _buildSlider(
+              context: context,
+              label: 'Context Buffer',
+              value: s.contextWindow.value.toDouble(),
+              onChanged: (v) => s.updateContextWindow(v.toInt()),
+            )),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextField({
+    required BuildContext context,
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    required IconData icon,
+    bool obscureText = false,
+    Widget? suffix,
+    required Function(String) onChanged,
+  }) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label.toUpperCase(), style: TextStyle(color: theme.colorScheme.onSurfaceVariant.withOpacity(0.6), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainer,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: theme.colorScheme.outline.withOpacity(0.5)),
+          ),
+          child: TextField(
+            controller: controller,
+            obscureText: obscureText,
+            onChanged: onChanged,
+            style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 14),
+            decoration: InputDecoration(
+              hintText: hint,
+              hintStyle: TextStyle(color: theme.colorScheme.onSurfaceVariant.withOpacity(0.5), fontSize: 14),
+              border: InputBorder.none,
+              icon: Icon(icon, color: theme.colorScheme.primary, size: 18),
+              suffixIcon: suffix,
             ),
           ),
+        ),
+      ],
+    );
+  }
 
-          const Divider(),
-          // ── Chat Behaviour ────────────────────────────────────
-          _header('Chat Behaviour'),
-          Obx(() => Column(
+  Widget _buildConnectionTester(ThemeData theme) {
+    return Obx(() => ElevatedButton(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: theme.colorScheme.primary.withOpacity(0.05),
+        foregroundColor: theme.colorScheme.primary,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: theme.colorScheme.primary.withOpacity(0.2)),
+        ),
+        minimumSize: const Size.fromHeight(48),
+      ),
+      onPressed: () async {
+        connectionResult.value = 'Testing...';
+        try {
+          final probeDio = Dio();
+          await probeDio.get(
+            'http://${s.ollamaIp.value}:${s.ollamaPort.value}/api/tags',
+            options: Options(connectTimeout: const Duration(seconds: 2)),
+          );
+          connectionResult.value = '✅ Ollama Online';
+        } catch (e) {
+          connectionResult.value = '❌ Unreachable';
+        }
+      },
+      child: Text(connectionResult.value.isEmpty ? 'Test Local Connectivity' : connectionResult.value),
+    ));
+  }
+
+  Widget _buildModelCard(ThemeData theme) {
+    return InkWell(
+      onTap: () => Get.to(() => const ModelSetupScreen()),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainer,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: theme.colorScheme.outline.withOpacity(0.5)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(Icons.memory_rounded, color: theme.colorScheme.primary),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Context Window: ${s.contextWindow.value} messages',
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                  Slider(
-                    value: s.contextWindow.value.toDouble(),
-                    min: 4,
-                    max: 20,
-                    divisions: 16,
-                    label: '${s.contextWindow.value}',
-                    onChanged: (v) => s.updateContextWindow(v.toInt()),
-                  ),
+                  Text('AI Model Environment', style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold)),
+                  Obx(() => Text(
+                    s.selectedModel.value.isNotEmpty && File(s.selectedModel.value).existsSync() 
+                        ? 'Llama 3.2 1B Active' : 'No local model found',
+                    style: TextStyle(color: (s.selectedModel.value.isNotEmpty && File(s.selectedModel.value).existsSync()) ? const Color(0xFF00E475) : const Color(0xFFFFB4AB), fontSize: 12),
+                  )),
                 ],
-              )),
-          Obx(() => Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Streaming Speed: ${s.streamDelayMs.value}ms delay',
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                  Slider(
-                    value: s.streamDelayMs.value.toDouble(),
-                    min: 0,
-                    max: 50,
-                    divisions: 10,
-                    label: '${s.streamDelayMs.value}ms',
-                    onChanged: (v) => s.updateStreamDelay(v.toInt()),
-                  ),
-                  const Text(
-                    '0ms = fastest · 50ms = smoother appearance',
-                    style: TextStyle(fontSize: 10, color: Colors.grey),
-                  ),
-                ],
-              )),
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: theme.colorScheme.onSurfaceVariant.withOpacity(0.4)),
+          ],
+        ),
+      ),
+    );
+  }
 
-          const Divider(),
-          // ── Appearance ────────────────────────────────────────
-          _header('Appearance'),
-          Obx(() => SwitchListTile(
-                title: const Text('Dark Mode'),
-                value: s.isDarkMode.value,
-                onChanged: (_) => s.toggleDarkMode(),
-              )),
-          const ListTile(
-            title: Text('App Version'),
-            subtitle: Text('2.0.0 (Selective Inference Edition)'),
+  Widget _buildToggle({required BuildContext context, required String title, required String subtitle, required bool value, required Function(bool) onChanged, required IconData icon}) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: theme.colorScheme.outline.withOpacity(0.5)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: theme.colorScheme.primary, size: 20),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold)),
+                Text(subtitle, style: TextStyle(color: theme.colorScheme.onSurfaceVariant.withOpacity(0.6), fontSize: 11)),
+              ],
+            ),
+          ),
+          Switch(
+            value: value,
+            onChanged: onChanged,
+            activeColor: theme.colorScheme.primary,
+            activeTrackColor: theme.colorScheme.primary.withOpacity(0.2),
           ),
         ],
       ),
     );
   }
 
-  Widget _header(String title) => Padding(
-        padding: const EdgeInsets.fromLTRB(0, 16, 0, 8),
-        child: Text(title.toUpperCase(),
-            style: const TextStyle(
-                fontSize: 11, fontWeight: FontWeight.bold, color: Colors.indigo)),
-      );
+  Widget _buildSlider({required BuildContext context, required String label, required double value, required Function(double) onChanged}) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label.toUpperCase(), style: TextStyle(color: theme.colorScheme.onSurfaceVariant.withOpacity(0.6), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+            Text('${value.toInt()} MSG', style: TextStyle(color: theme.colorScheme.primary, fontSize: 10, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        Slider(
+          value: value,
+          min: 2,
+          max: 20,
+          activeColor: theme.colorScheme.primary,
+          inactiveColor: theme.colorScheme.outline.withOpacity(0.2),
+          onChanged: onChanged,
+        ),
+      ],
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  const _SectionHeader({Key? key, required this.title}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Text(
+      title,
+      style: TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w900,
+        color: theme.colorScheme.primary,
+        letterSpacing: 1.5,
+      ),
+    );
+  }
 }

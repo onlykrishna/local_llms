@@ -8,8 +8,9 @@ import '../../core/services/settings_service.dart';
 class ModelSetupController extends GetxController {
   static const String _modelUrl =
       'https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/'
-      'resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf';
-  static const String _modelFileName = 'llama-3.2-1b-q4.gguf';
+      'resolve/main/Llama-3.2-1B-Instruct-IQ4_XS.gguf';
+  static const String _modelFileName = 'llama-3.2-1b-iq4_xs.gguf';
+  static const String _legacyModelFileName = 'llama-3.2-1b-q4.gguf';
 
   final SettingsService _settings = Get.find<SettingsService>();
   final downloadProgress = 0.0.obs;
@@ -39,22 +40,30 @@ class ModelSetupController extends GetxController {
 
   Future<String?> _resolveModelPath() async {
     final dir = await getApplicationDocumentsDirectory();
-    final path = '${dir.path}/models/$_modelFileName';
-    final file = File(path);
+    final modelDir = Directory('${dir.path}/models');
+    if (!modelDir.existsSync()) return null;
 
-    if (await file.exists()) {
-      final size = await file.length();
-      if (size > 200 * 1024 * 1024) return path; // >200MB = valid
+    // Check for Q2 (new default) or Q4 (legacy)
+    for (var name in [_modelFileName, _legacyModelFileName]) {
+      final path = '${modelDir.path}/$name';
+      final file = File(path);
+      if (file.existsSync()) {
+        final err = await _validateDownloadedFile(path);
+        if (err == null) return path;
+      }
     }
 
     // Check external (adb push fallback)
     try {
       final ext = await getExternalStorageDirectory();
       if (ext != null) {
-        final extPath = '${ext.path}/$_modelFileName';
-        if (await File(extPath).exists()) {
-          await _migrateToInternal(extPath, path);
-          return path;
+        for (var name in [_modelFileName, _legacyModelFileName]) {
+          final extPath = '${ext.path}/$name';
+          if (File(extPath).existsSync()) {
+            final dest = '${modelDir.path}/$name';
+            await _migrateToInternal(extPath, dest);
+            return dest;
+          }
         }
       }
     } catch (_) {}
@@ -107,10 +116,20 @@ class ModelSetupController extends GetxController {
 
       // Rename .part → final
       await partialFile.rename(destPath);
+      
+      // Post-download integrity check
+      final valErr = await _validateDownloadedFile(destPath);
+      if (valErr != null) {
+        await File(destPath).delete();
+        Get.snackbar('❌ Download Corrupt', valErr);
+        isDownloading.value = false;
+        return;
+      }
+
       modelPath.value = destPath;
       isModelReady.value = true;
       _settings.updateModel(destPath); // Update global settings
-      Get.snackbar('✅ Model Ready', 'Llama 3.2 1B installed successfully!');
+      Get.snackbar('✅ Model Ready', 'Llama 3.2 1B (IQ4_XS) installed successfully!');
     } on DioException catch (e) {
       if (e.type != DioExceptionType.cancel) {
         Get.snackbar('Download Error', e.message ?? 'Unknown error');
@@ -119,6 +138,24 @@ class ModelSetupController extends GetxController {
       isDownloading.value = false;
       _cancelToken = null;
     }
+  }
+
+  Future<String?> _validateDownloadedFile(String path) async {
+    final file = File(path);
+    if (!file.existsSync()) return 'File not found';
+    final size = await file.length();
+    if (size < 100 * 1024 * 1024) return 'File too small';
+    
+    // Check GGUF magic bytes: 0x47475546
+    final raf = await file.open();
+    final header = await raf.read(4);
+    await raf.close();
+    if (header.length < 4 || 
+        header[0] != 0x47 || header[1] != 0x47 || 
+        header[2] != 0x55 || header[3] != 0x46) {
+      return 'Valid GGUF header not found.';
+    }
+    return null;
   }
 
   void cancelDownload() {
@@ -133,11 +170,11 @@ class ModelSetupController extends GetxController {
 
     final src = result.files.single.path!;
     final srcFile = File(src);
-    final size = await srcFile.length();
-
-    if (size < 200 * 1024 * 1024) {
-      Get.snackbar('Invalid File',
-          'File is too small (${(size / (1024 * 1024)).toStringAsFixed(0)} MB). Expected ~650MB+.');
+    
+    // Validate before copying
+    final valErr = await _validateDownloadedFile(src);
+    if (valErr != null) {
+      Get.snackbar('Invalid File', valErr);
       return;
     }
 

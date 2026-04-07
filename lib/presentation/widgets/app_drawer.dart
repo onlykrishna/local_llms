@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../core/services/settings_service.dart';
@@ -17,157 +18,381 @@ class AppDrawer extends StatelessWidget {
     final controller = Get.find<ChatController>();
     final router = Get.find<InferenceRouterService>();
     final domainService = Get.find<DomainService>();
+    final theme = Theme.of(context);
 
     return Drawer(
+      backgroundColor: theme.colorScheme.surface,
       child: Column(
         children: [
           _buildHeader(context),
-          // Backend status card
-          Obx(() => _BackendCard(backend: router.currentBackend.value)),
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.memory_rounded, color: Colors.indigoAccent),
-            title: const Text('AI Model Setup'),
-            subtitle: const Text('Download Llama 3.2 1B'),
-            onTap: () {
-              Get.back();
-              Get.to(() => const ModelSetupScreen());
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.history_rounded, color: Colors.blueAccent),
-            title: const Text('Chat History'),
-            onTap: () {
-              Get.back();
-              Get.to(() => const HistoryPage());
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.settings, color: Colors.indigoAccent),
-            title: const Text('Settings'),
-            onTap: () {
-              Get.back();
-              Get.to(() => const SettingsPage());
-            },
-          ),
-          Obx(() => ListTile(
-                leading: Icon(
-                  settings.isDarkMode.value ? Icons.dark_mode : Icons.light_mode,
-                  color: Colors.orangeAccent,
+          
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              children: [
+                const SizedBox(height: 16),
+                Obx(() => _BackendStatusCard(backend: router.currentBackend.value)),
+                const SizedBox(height: 24),
+                
+                _DrawerItem(
+                  icon: Icons.memory_rounded,
+                  label: 'AI Model Setup',
+                  subtitle: 'Optimise GGUF parameters',
+                  color: theme.colorScheme.primary,
+                  onTap: () {
+                    Get.back();
+                    Get.to(() => const ModelSetupScreen());
+                  },
                 ),
-                title: const Text('Dark Mode'),
-                trailing: Switch(
-                  value: settings.isDarkMode.value,
-                  onChanged: (_) => settings.toggleDarkMode(),
+                _DrawerItem(
+                  icon: Icons.history_rounded,
+                  label: 'Chat History',
+                  subtitle: 'Recall past interactions',
+                  color: theme.colorScheme.secondary,
+                  onTap: () {
+                    Get.back();
+                    Get.to(() => const HistoryPage());
+                  },
                 ),
-              )),
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.delete_outline, color: Colors.redAccent),
-            title: const Text('Clear Chat'),
-            onTap: () => controller.clearChat(),
-          ),
-          const Spacer(),
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: Text(
-              'Selective Inference v2.0\nHealth · Bollywood · Education · General',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 10, color: Colors.grey),
+                _DrawerItem(
+                  icon: Icons.settings_rounded,
+                  label: 'Global Settings',
+                  subtitle: 'API keys & Network',
+                  color: theme.colorScheme.primary.withOpacity(0.8),
+                  onTap: () {
+                    Get.back();
+                    Get.to(() => const SettingsPage());
+                  },
+                ),
+                
+                const Divider(height: 40),
+                
+                Obx(() => _ThemeToggle(
+                  isDarkMode: settings.isDarkMode.value,
+                  onChanged: settings.toggleDarkMode,
+                )),
+                
+                _DrawerItem(
+                  icon: Icons.delete_outline_rounded,
+                  label: 'Clear Current Chat',
+                  color: theme.colorScheme.error,
+                  isDestructive: true,
+                  onTap: () {
+                    Get.back();
+                    controller.clearChat();
+                  },
+                ),
+              ],
             ),
           ),
+          
+          _buildFooter(domainService, theme),
         ],
       ),
     );
   }
 
   Widget _buildHeader(BuildContext context) {
-    return DrawerHeader(
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.only(
+        top: MediaQuery.of(context).padding.top + 20,
+        bottom: 24,
+        left: 24,
+        right: 24,
+      ),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [Colors.indigo.shade800, Colors.deepPurple.shade700],
+          colors: [
+            isDark ? const Color(0xFF2E1A47) : theme.colorScheme.primary.withOpacity(0.8),
+            theme.colorScheme.surface,
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: const [
-          CircleAvatar(
-            radius: 24,
-            backgroundColor: Colors.white24,
-            child: Icon(Icons.psychology, color: Colors.white, size: 28),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary.withOpacity(0.1),
+              shape: BoxShape.circle,
+              border: Border.all(color: theme.colorScheme.primary.withOpacity(0.2)),
+            ),
+            child: Icon(Icons.psychology_rounded, color: theme.colorScheme.primary, size: 32),
           ),
-          SizedBox(height: 12),
-          Text('Offline AI',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold)),
-          Text('3-Layer Selective Inference',
-              style: TextStyle(color: Colors.white70, fontSize: 11)),
+          const SizedBox(height: 16),
+          Text(
+            'Offline AI',
+            style: TextStyle(
+              color: theme.colorScheme.onSurface,
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              letterSpacing: -0.5,
+            ),
+          ),
+          Text(
+            '3-Layer Selective Inference',
+            style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildFooter(DomainService domainService, ThemeData theme) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            Text(
+              'v2.1.0-STABLE',
+              style: TextStyle(color: theme.colorScheme.outlineVariant, fontSize: 10, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              alignment: WrapAlignment.center,
+              children: ['HEALTH', 'BOLLYWOOD', 'EDUCATION', 'GENERAL'].map((d) => Text(
+                d,
+                style: TextStyle(color: theme.colorScheme.onSurfaceVariant.withOpacity(0.4), fontSize: 9, letterSpacing: 1),
+              )).toList(),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _BackendCard extends StatelessWidget {
+class _BackendStatusCard extends StatelessWidget {
   final InferenceBackend backend;
-  const _BackendCard({required this.backend});
+  const _BackendStatusCard({required this.backend});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.all(12),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: _color.withAlpha(25),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _color.withAlpha(80)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 10, height: 10,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: _color),
+    final theme = Theme.of(context);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: _color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: _color.withOpacity(0.2)),
           ),
-          const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: [
-              Text(_label,
-                  style: TextStyle(fontWeight: FontWeight.bold, color: _color, fontSize: 13)),
-              Text(_subtitle, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+              _PulseIndicator(color: _color),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'SYSTEM STATUS',
+                      style: TextStyle(color: _color.withOpacity(0.6), fontSize: 10, fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      _label,
+                      style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                    Text(
+                      _subtitle,
+                      style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }
 
   Color get _color {
     switch (backend) {
-      case InferenceBackend.gemini:   return Colors.green;
-      case InferenceBackend.ollama:   return Colors.blue;
-      case InferenceBackend.onDevice: return Colors.orange;
+      case InferenceBackend.gemini:   return const Color(0xFF00E475);
+      case InferenceBackend.ollama:   return const Color(0xFF5D38BB);
+      case InferenceBackend.onDevice: return const Color(0xFFFFB4AB);
     }
   }
 
   String get _label {
     switch (backend) {
-      case InferenceBackend.gemini:   return 'Online (Gemini Flash)';
+      case InferenceBackend.gemini:   return 'Gemini Flash';
       case InferenceBackend.ollama:   return 'Ollama LAN';
-      case InferenceBackend.onDevice: return 'On-device AI';
+      case InferenceBackend.onDevice: return 'Local Llama';
     }
   }
 
   String get _subtitle {
     switch (backend) {
-      case InferenceBackend.gemini:   return 'Free tier · 1M tokens/day';
-      case InferenceBackend.ollama:   return 'Local LAN server';
-      case InferenceBackend.onDevice: return 'Llama 3.2 1B — 100% offline';
+      case InferenceBackend.gemini:   return 'Online · High precision';
+      case InferenceBackend.ollama:   return 'Network · Private host';
+      case InferenceBackend.onDevice: return 'Offline · 1.0B Parameter';
     }
+  }
+}
+
+class _PulseIndicator extends StatefulWidget {
+  final Color color;
+  const _PulseIndicator({required this.color});
+
+  @override
+  State<_PulseIndicator> createState() => _PulseIndicatorState();
+}
+
+class _PulseIndicatorState extends State<_PulseIndicator> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
+  }
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Container(
+          width: 12, height: 12,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: widget.color.withOpacity(1 - _controller.value),
+            boxShadow: [
+              BoxShadow(
+                color: widget.color.withOpacity(0.5 * (1 - _controller.value)),
+                blurRadius: 10 * _controller.value,
+                spreadRadius: 5 * _controller.value,
+              )
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _DrawerItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String? subtitle;
+  final Color color;
+  final VoidCallback onTap;
+  final bool isDestructive;
+
+  const _DrawerItem({
+    required this.icon,
+    required this.label,
+    this.subtitle,
+    required this.color,
+    required this.onTap,
+    this.isDestructive = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            color: isDestructive ? color.withOpacity(0.05) : Colors.transparent,
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: color, size: 22),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        color: isDestructive ? color : theme.colorScheme.onSurface,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                      ),
+                    ),
+                    if (subtitle != null)
+                      Text(
+                        subtitle!,
+                        style: TextStyle(color: theme.colorScheme.onSurfaceVariant.withOpacity(0.6), fontSize: 11),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ThemeToggle extends StatelessWidget {
+  final bool isDarkMode;
+  final Function(bool) onChanged;
+
+  const _ThemeToggle({required this.isDarkMode, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainer,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: theme.colorScheme.outline.withOpacity(0.5)),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              isDarkMode ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+              color: isDarkMode ? theme.colorScheme.secondary : Colors.amber,
+              size: 20,
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                'Aetheric Glow',
+                style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 14, fontWeight: FontWeight.w500),
+              ),
+            ),
+            Switch(
+              value: isDarkMode,
+              onChanged: onChanged,
+              activeColor: theme.colorScheme.secondary,
+              activeTrackColor: theme.colorScheme.primary.withOpacity(0.2),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

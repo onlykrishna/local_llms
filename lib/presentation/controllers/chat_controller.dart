@@ -58,8 +58,12 @@ class ChatController extends GetxController {
     final text = inputController.text.trim();
     if (text.isEmpty) return;
 
+    print('>>> SEND: $text');
+    print('>>> GENERATING: ${isGenerating.value}');
+
     // If already generating → cancel first, wait for cleanup
     if (isGenerating.value) {
+      print('>>> CANCELLING PREVIOUS');
       _cancelCurrentResponse(keepPartial: true);
       await Future.delayed(const Duration(milliseconds: 150));
     }
@@ -91,21 +95,36 @@ class ChatController extends GetxController {
 
     // 4. Stream inference
     final systemPrompt = _domainService.getSystemPrompt();
+    print('>>> ROUTER: calling respond() with backend: ${_router.currentBackend.value}');
+
     final stream = _router.respond(
       userMessage: text,
       systemPrompt: systemPrompt,
       history: history,
+    ).timeout(
+      const Duration(seconds: 360), // 6 min — covers 300s model load + inference
+      onTimeout: (sink) {
+        debugPrint('[Chat] Response TIMEOUT after 360s');
+        sink.addError('Response timed out. If using on-device AI, the model may be too large for this device.');
+        sink.close();
+      },
     );
+
+    print('>>> STREAM STARTED');
 
     currentMessageState.value = MessageState.streaming;
 
     _currentSubscription = stream.listen(
       (token) {
+        if (_responseBuffer.isEmpty) {
+          print('>>> FIRST TOKEN: $token');
+        }
         _responseBuffer.write(token);
         currentResponseText.value = _responseBuffer.toString();
         _scrollToBottom();
       },
       onDone: () async {
+        print('>>> STREAM DONE');
         currentMessageState.value = MessageState.done;
         isGenerating.value = false;
 
@@ -119,12 +138,13 @@ class ChatController extends GetxController {
         currentResponseText.value = '';
         _currentPlaceholderId = null;
       },
-      onError: (e) {
+      onError: (e, stack) {
+        print('>>> STREAM ERROR: $e\n$stack');
         currentMessageState.value = MessageState.error;
         isGenerating.value = false;
         final errMsg = ChatMessage(
-          id: placeholderId,
-          content: '⚠️ Error: ${e.toString()}',
+          id: placeholderId ?? _uuid.v4(),
+          content: '⚠️ ${e.toString()}',
           isUser: false,
         );
         messages.insert(0, errMsg);
@@ -142,6 +162,7 @@ class ChatController extends GetxController {
   void stopGeneration() => _cancelCurrentResponse(keepPartial: true);
 
   void _cancelCurrentResponse({bool keepPartial = true}) {
+    print('>>> MANUAL STOP');
     _currentSubscription?.cancel();
     _currentSubscription = null;
     _router.cancelCurrentRequest();
