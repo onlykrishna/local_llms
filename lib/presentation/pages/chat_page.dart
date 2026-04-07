@@ -14,40 +14,46 @@ class ChatPage extends GetView<ChatController> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Column(
-      children: [
-        const SizedBox(height: 100), // Spacing for transparent appbar if needed
-        const BackendStatusBar(),
-        
-        Expanded(
-          child: Obx(() => ListView.builder(
-            controller: controller.scrollController,
-            reverse: true,
-            itemCount: controller.messages.length +
-                (controller.isGenerating.value ? 1 : 0),
-            padding: const EdgeInsets.only(bottom: 24, top: 12),
-            itemBuilder: (context, index) {
-              if (index == 0 && controller.isGenerating.value) {
-                if (controller.currentResponseText.value.isEmpty) {
-                  return Animate(child: const TypingIndicator())
-                      .fadeIn(duration: 400.ms)
-                      .slideY(begin: 0.1, end: 0);
-                } else {
-                  return Animate(child: _StreamingBubble(controller: controller))
-                      .fadeIn(duration: 300.ms);
+    
+    // ISSUE 1: Removed global GestureDetector as it interfered with drawer/navigation.
+    // Replaced with professional 'onTapOutside' on TextField (see _buildInputArea).
+    return Scaffold(
+      backgroundColor: Colors.transparent, // Background handled by parent (main.dart)
+      resizeToAvoidBottomInset: true,
+      body: Column(
+        children: [
+          const SizedBox(height: 100), // Spacing for transparent appbar
+          const BackendStatusBar(),
+          
+          Expanded(
+            child: Obx(() => ListView.builder(
+              controller: controller.scrollController,
+              reverse: true, // Reversed for messaging behavior
+              physics: const BouncingScrollPhysics(),
+              itemCount: controller.messages.length + (controller.isGenerating.value ? 1 : 0),
+              padding: const EdgeInsets.only(bottom: 24, top: 12),
+              itemBuilder: (context, index) {
+                if (index == 0 && controller.isGenerating.value) {
+                  if (controller.currentResponseText.value.isEmpty) {
+                    return Animate(child: const TypingIndicator())
+                        .fadeIn(duration: 400.ms)
+                        .slideY(begin: 0.1, end: 0);
+                  } else {
+                    return Animate(child: _StreamingBubble(controller: controller))
+                        .fadeIn(duration: 300.ms);
+                  }
                 }
-              }
-              final msgIndex =
-                  controller.isGenerating.value ? index - 1 : index;
-              final msg = controller.messages[msgIndex];
-              return Animate(child: MessageBubble(message: msg))
-                  .fadeIn(duration: 400.ms)
-                  .slideX(begin: msg.isUser ? 0.05 : -0.05, end: 0);
-            },
-          )),
-        ),
-        _buildInputArea(context),
-      ],
+                final msgIndex = controller.isGenerating.value ? index - 1 : index;
+                final msg = controller.messages[msgIndex];
+                return Animate(child: MessageBubble(message: msg))
+                    .fadeIn(duration: 400.ms)
+                    .slideX(begin: msg.isUser ? 0.05 : -0.05, end: 0);
+              },
+            )),
+          ),
+          _buildInputArea(context),
+        ],
+      ),
     );
   }
 
@@ -82,6 +88,10 @@ class ChatPage extends GetView<ChatController> {
                         style: TextStyle(color: theme.colorScheme.onSurface),
                         textInputAction: TextInputAction.send,
                         onSubmitted: (_) => controller.sendMessage(),
+                        // FIX: Precise unfocus control that doesn't trigger when tapping functional UI elements
+                        onTapOutside: (event) {
+                          FocusManager.instance.primaryFocus?.unfocus();
+                        },
                         decoration: InputDecoration(
                           hintText: 'Synthesizing with local knowledge...',
                           hintStyle: TextStyle(color: theme.colorScheme.onSurfaceVariant.withOpacity(0.5), fontSize: 13),

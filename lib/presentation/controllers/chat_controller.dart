@@ -22,7 +22,7 @@ class ChatController extends GetxController {
   final RxBool isGenerating = false.obs;
   final Rx<MessageState> currentMessageState = MessageState.idle.obs;
   final RxString currentResponseText = ''.obs;
-  final RxBool isOllamaOnline = false.obs; // kept for backward UI compat
+  final RxBool isOllamaOnline = false.obs; 
 
   final TextEditingController inputController = TextEditingController();
   final ScrollController scrollController = ScrollController();
@@ -58,24 +58,22 @@ class ChatController extends GetxController {
     final text = inputController.text.trim();
     if (text.isEmpty) return;
 
-    print('>>> SEND: $text');
-    print('>>> GENERATING: ${isGenerating.value}');
+    // FEATURE 3: Greeting interception for All domain categories
+    if (_isCommonGreeting(text)) {
+      _handleInterception(text);
+      return;
+    }
 
-    // If already generating → cancel first, wait for cleanup
     if (isGenerating.value) {
-      print('>>> CANCELLING PREVIOUS');
       _cancelCurrentResponse(keepPartial: true);
       await Future.delayed(const Duration(milliseconds: 150));
     }
 
     inputController.clear();
-
-    // 1. Add user message
     final userMsg = ChatMessage(id: _uuid.v4(), content: text, isUser: true);
     messages.insert(0, userMsg);
     _repository.saveMessage(userMsg);
 
-    // 2. Placeholder for AI response
     final placeholderId = _uuid.v4();
     _currentPlaceholderId = placeholderId;
     _responseBuffer.clear();
@@ -83,70 +81,50 @@ class ChatController extends GetxController {
     currentMessageState.value = MessageState.thinking;
     isGenerating.value = true;
 
-    // 3. Build history for context window
     final contextWindow = _settings.contextWindow.value;
     final history = messages
-        .skip(1) // skip the user message we just added
+        .skip(1)
         .take(contextWindow)
         .map((m) => {'isUser': m.isUser, 'content': m.content})
         .toList()
         .reversed
         .toList();
 
-    // 4. Stream inference
     final systemPrompt = _domainService.getSystemPrompt();
-    print('>>> ROUTER: calling respond() with backend: ${_router.currentBackend.value}');
-
+    
     final stream = _router.respond(
       userMessage: text,
       systemPrompt: systemPrompt,
       history: history,
     ).timeout(
-      const Duration(seconds: 360), // 6 min — covers 300s model load + inference
+      const Duration(seconds: 360),
       onTimeout: (sink) {
-        debugPrint('[Chat] Response TIMEOUT after 360s');
-        sink.addError('Response timed out. If using on-device AI, the model may be too large for this device.');
+        sink.addError('Response timed out. Please check your connectivity or model status.');
         sink.close();
       },
     );
-
-    print('>>> STREAM STARTED');
 
     currentMessageState.value = MessageState.streaming;
 
     _currentSubscription = stream.listen(
       (token) {
-        if (_responseBuffer.isEmpty) {
-          print('>>> FIRST TOKEN: $token');
-        }
         _responseBuffer.write(token);
         currentResponseText.value = _responseBuffer.toString();
         _scrollToBottom();
       },
       onDone: () async {
-        print('>>> STREAM DONE');
         currentMessageState.value = MessageState.done;
         isGenerating.value = false;
-
-        final aiMsg = ChatMessage(
-          id: placeholderId,
-          content: _responseBuffer.toString(),
-          isUser: false,
-        );
+        final aiMsg = ChatMessage(id: placeholderId, content: _responseBuffer.toString(), isUser: false);
         messages.insert(0, aiMsg);
         await _repository.saveMessage(aiMsg);
         currentResponseText.value = '';
         _currentPlaceholderId = null;
       },
-      onError: (e, stack) {
-        print('>>> STREAM ERROR: $e\n$stack');
+      onError: (e, _) {
         currentMessageState.value = MessageState.error;
         isGenerating.value = false;
-        final errMsg = ChatMessage(
-          id: placeholderId ?? _uuid.v4(),
-          content: '⚠️ ${e.toString()}',
-          isUser: false,
-        );
+        final errMsg = ChatMessage(id: placeholderId, content: '⚠️ $e', isUser: false);
         messages.insert(0, errMsg);
         _repository.saveMessage(errMsg);
         currentResponseText.value = '';
@@ -156,20 +134,52 @@ class ChatController extends GetxController {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // CANCEL (stop button)
-  // ---------------------------------------------------------------------------
+  // Intercept common greetings to avoid unnecessary AI routing latency
+  bool _isCommonGreeting(String text) {
+    final greetings = {'hi', 'hello', 'hey', 'namaste', 'hlo', 'hii', 'hi there', 'hello there', 'greeting', 'greetings'};
+    return greetings.contains(text.toLowerCase());
+  }
+
+  void _handleInterception(String text) async {
+    inputController.clear();
+    final userMsg = ChatMessage(id: _uuid.v4(), content: text, isUser: true);
+    messages.insert(0, userMsg);
+    _repository.saveMessage(userMsg);
+
+    isGenerating.value = true;
+    currentMessageState.value = MessageState.streaming;
+    
+    final domainName = _domainService.selectedDomain.value.name.capitalizeFirst;
+    // Virtual streaming for instant feedback
+    final response = 'Hello! I am your Ethereal Intelligence. How can I assist you in the $domainName domain today?';
+    final words = response.split(' ');
+    
+    for (var i = 0; i < words.length; i++) {
+        await Future.delayed(const Duration(milliseconds: 30));
+        _responseBuffer.write('${words[i]} ');
+        currentResponseText.value = _responseBuffer.toString();
+        _scrollToBottom();
+    }
+
+    final aiMsg = ChatMessage(id: _uuid.v4(), content: response, isUser: false);
+    messages.insert(0, aiMsg);
+    await _repository.saveMessage(aiMsg);
+    
+    currentResponseText.value = '';
+    _responseBuffer.clear();
+    isGenerating.value = false;
+    currentMessageState.value = MessageState.done;
+  }
+
   void stopGeneration() => _cancelCurrentResponse(keepPartial: true);
 
   void _cancelCurrentResponse({bool keepPartial = true}) {
-    print('>>> MANUAL STOP');
     _currentSubscription?.cancel();
     _currentSubscription = null;
     _router.cancelCurrentRequest();
 
     final partial = _responseBuffer.toString();
     if (keepPartial && partial.isNotEmpty) {
-      // Show partial with [stopped] marker
       final cancelledMsg = ChatMessage(
         id: _currentPlaceholderId ?? _uuid.v4(),
         content: '$partial [stopped]',
@@ -186,9 +196,6 @@ class ChatController extends GetxController {
     isGenerating.value = false;
   }
 
-  // ---------------------------------------------------------------------------
-  // HELPERS
-  // ---------------------------------------------------------------------------
   void _loadHistory() async {
     final history = await _repository.getChatHistory();
     messages.assignAll(history.reversed.toList());
@@ -202,11 +209,7 @@ class ChatController extends GetxController {
 
   void _scrollToBottom() {
     if (scrollController.hasClients) {
-      scrollController.animateTo(
-        0,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-      );
+      scrollController.animateTo(0, duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
     }
   }
 

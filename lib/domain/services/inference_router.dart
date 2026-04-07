@@ -10,21 +10,18 @@ import '../services/on_device_inference_service.dart';
 
 enum InferenceBackend { ollama, gemini, onDevice }
 
-/// Smart 3-layer Inference Router.
-///
-/// Priority:
-///   1. Ollama LAN (1.5s probe)
-///   2. Gemini 1.5 Flash (free API, if internet)
-///   3. On-device llama.cpp (always available fallback)
+/// Smart 3-layer Inference Router with Manual Override capability.
 class InferenceRouterService extends GetxService {
   final Rx<InferenceBackend> currentBackend = InferenceBackend.onDevice.obs;
+  
+  // FEATURE 3: Manual Switching State
+  final RxBool isManualMode = false.obs;
+  final Rx<InferenceBackend> manualBackend = InferenceBackend.gemini.obs;
 
   final _gemini = GeminiDatasource();
   final _dio = Dio();
 
   CancelToken? _ollamaCancelToken;
-  StreamSubscription? _activeSubscription;
-
   late SettingsService _settings;
   late OnDeviceInferenceService _onDevice;
   late DomainService _domainService;
@@ -36,8 +33,16 @@ class InferenceRouterService extends GetxService {
     return this;
   }
 
-  /// Probe Ollama with 1.5-second timeout.
-  /// Use a fresh Dio instance to avoid any global config lock.
+  void setManualBackend(InferenceBackend backend) {
+    isManualMode.value = true;
+    manualBackend.value = backend;
+    currentBackend.value = backend;
+  }
+
+  void resetToAuto() {
+    isManualMode.value = false;
+  }
+
   Future<bool> _isOllamaReachable() async {
     try {
       final ip = _settings.ollamaIp.value;
@@ -53,45 +58,28 @@ class InferenceRouterService extends GetxService {
       );
       return resp.statusCode == 200;
     } catch (e) {
-      print('>>> ROUTER: Ollama probe failed: $e');
       return false;
     }
   }
 
   Future<bool> _hasInternet() async {
     final result = await Connectivity().checkConnectivity();
-    final hasInternet = result.isNotEmpty && !result.every((r) => r == ConnectivityResult.none);
-    print('>>> ROUTER: has internet = $hasInternet ($result)');
-    return hasInternet;
+    return result.isNotEmpty && !result.every((r) => r == ConnectivityResult.none);
   }
 
   Future<InferenceBackend> _resolveBackend() async {
-    print('>>> ROUTER: Resolving backend...');
-    
-    // Layer 1: Try Ollama LAN
-    final ollamaReady = await _isOllamaReachable();
-    print('>>> ROUTER: Ollama reachable = $ollamaReady');
-    if (ollamaReady) {
-      print('>>> ROUTER: Selected OLLAMA');
-      return InferenceBackend.ollama;
-    }
+    if (isManualMode.value) return manualBackend.value;
 
-    // Layer 2: Internet → Gemini
+    final ollamaReady = await _isOllamaReachable();
+    if (ollamaReady) return InferenceBackend.ollama;
+
     final hasInternet = await _hasInternet();
     final hasGeminiKey = _settings.geminiApiKey.value.isNotEmpty;
-    print('>>> ROUTER: Gemini Key present = $hasGeminiKey');
-    
-    if (hasInternet && hasGeminiKey) {
-      print('>>> ROUTER: Selected GEMINI');
-      return InferenceBackend.gemini;
-    }
+    if (hasInternet && hasGeminiKey) return InferenceBackend.gemini;
 
-    // Layer 3: On-device
-    print('>>> ROUTER: Selected ON_DEVICE (Fallback)');
     return InferenceBackend.onDevice;
   }
 
-  /// Main entry point: streams response tokens for a given prompt.
   Stream<String> respond({
     required String userMessage,
     required String systemPrompt,
@@ -101,8 +89,6 @@ class InferenceRouterService extends GetxService {
     
     final backend = await _resolveBackend();
     currentBackend.value = backend;
-    print('>>> ROUTER: backend = ${currentBackend.value}');
-
     final domainName = _domainService.selectedDomain.value.name;
 
     switch (backend) {
@@ -117,11 +103,6 @@ class InferenceRouterService extends GetxService {
             systemPrompt: systemPrompt,
             history: history,
           );
-        } on GeminiRateLimitException {
-          // Fallback to on-device
-          print('>>> ROUTER: Gemini rate limit! Falling back to OnDevice');
-          currentBackend.value = InferenceBackend.onDevice;
-          yield* _onDevice.respond(userMessage, systemPrompt, domainName);
         } catch (e) {
              print('>>> ROUTER: Gemini error: $e. Falling back to OnDevice');
              currentBackend.value = InferenceBackend.onDevice;
@@ -134,7 +115,6 @@ class InferenceRouterService extends GetxService {
     }
   }
 
-  /// Streams Ollama /api/chat with system prompt injected.
   Stream<String> _streamOllama(
     String userMessage,
     String systemPrompt,
@@ -171,8 +151,6 @@ class InferenceRouterService extends GetxService {
           for (final line in lines) {
             String cleanLine = line.trim();
             if (cleanLine.isEmpty) continue;
-            
-            // Ollama JSON uses "content":"token"
             final start = cleanLine.indexOf('"content":"');
             if (start != -1) {
               final contentStart = start + 11;
@@ -191,7 +169,6 @@ class InferenceRouterService extends GetxService {
     }
   }
 
-  /// Cancel any in-flight request immediately.
   void cancelCurrentRequest() {
     _ollamaCancelToken?.cancel('Cancelled by user');
     _ollamaCancelToken = null;

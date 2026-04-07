@@ -3,7 +3,6 @@ import 'package:get/get.dart';
 import '../../domain/services/inference_router.dart';
 import '../../domain/services/domain_service.dart';
 import '../../domain/models/inference_domain.dart';
-import '../pages/settings_page.dart';
 
 class BackendStatusBar extends StatelessWidget {
   const BackendStatusBar({super.key});
@@ -12,18 +11,37 @@ class BackendStatusBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final router = Get.find<InferenceRouterService>();
     final domainService = Get.find<DomainService>();
+    final theme = Theme.of(context);
 
     return Container(
-      height: 28,
-      color: Theme.of(context).colorScheme.surface,
+      height: 32,
+      color: theme.colorScheme.surface,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
         children: [
-          // Left: backend indicator
+          // Left: backend selector (FEATURE 3)
           Obx(() {
-            final backend = router.currentBackend.value;
-            return GestureDetector(
-              onTap: () => Get.to(() => const SettingsPage()),
+            final backend = router.isManualMode.value 
+                ? router.manualBackend.value 
+                : router.currentBackend.value;
+            final isManual = router.isManualMode.value;
+
+            return PopupMenuButton<InferenceBackend>(
+              padding: EdgeInsets.zero,
+              offset: const Offset(0, 30),
+              tooltip: 'Choose AI Engine',
+              onSelected: (InferenceBackend b) {
+                if (b == InferenceBackend.onDevice) { // Simplified: actually let's just make a specific entry for 'Auto'
+                   // I'll add an 'Auto' option below
+                }
+                router.setManualBackend(b);
+              },
+              itemBuilder: (context) => [
+                _buildMenuItem(context, 'Auto Routing', Icons.auto_mode_rounded, Colors.grey, null, isAuto: true),
+                _buildMenuItem(context, 'Gemini Flash', Icons.cloud_rounded, Colors.green, InferenceBackend.gemini),
+                _buildMenuItem(context, 'Ollama LAN', Icons.lan_rounded, Colors.blue, InferenceBackend.ollama),
+                _buildMenuItem(context, 'On-device AI', Icons.memory_rounded, Colors.orange, InferenceBackend.onDevice),
+              ],
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -33,17 +51,25 @@ class BackendStatusBar extends StatelessWidget {
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: _dotColor(backend),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _dotColor(backend).withOpacity(0.5),
+                          blurRadius: 4,
+                          spreadRadius: 1,
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 5),
+                  const SizedBox(width: 6),
                   Text(
-                    _backendLabel(backend),
+                    isManual ? '${_backendLabel(backend)} (Locked)' : _backendLabel(backend),
                     style: TextStyle(
                       fontSize: 11,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.bold,
                       color: _dotColor(backend),
                     ),
                   ),
+                  Icon(Icons.arrow_drop_down_rounded, size: 16, color: _dotColor(backend)),
                 ],
               ),
             );
@@ -55,33 +81,66 @@ class BackendStatusBar extends StatelessWidget {
           Obx(() {
             final domain = domainService.selectedDomain.value;
             return Container(
-              height: 20,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
+              height: 22,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
               decoration: BoxDecoration(
-                color: _domainColor(domain).withOpacity(0.12),
-                borderRadius: BorderRadius.circular(10),
+                color: _domainColor(domain).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: _domainColor(domain).withOpacity(0.3),
+                  color: _domainColor(domain).withOpacity(0.25),
                   width: 1,
                 ),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(_domainIcon(domain), size: 10, color: _domainColor(domain)),
-                  const SizedBox(width: 3),
+                  Icon(_domainIcon(domain), size: 11, color: _domainColor(domain)),
+                  const SizedBox(width: 4),
                   Text(
                     domain.label,
                     style: TextStyle(
                       fontSize: 10,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w800,
                       color: _domainColor(domain),
+                      letterSpacing: 0.5,
                     ),
                   ),
                 ],
               ),
             );
           }),
+        ],
+      ),
+    );
+  }
+
+  PopupMenuItem<InferenceBackend> _buildMenuItem(
+    BuildContext context, 
+    String label, 
+    IconData icon, 
+    Color color,
+    InferenceBackend? value,
+    {bool isAuto = false}
+  ) {
+    final router = Get.find<InferenceRouterService>();
+    return PopupMenuItem<InferenceBackend>(
+      value: value ?? InferenceBackend.onDevice, // dummy if auto
+      onTap: isAuto ? () => router.resetToAuto() : null,
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 12),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+          ),
+          if (isAuto && !router.isManualMode.value) ...[
+            const Spacer(),
+            const Icon(Icons.check_circle_rounded, size: 16, color: Colors.green),
+          ] else if (value != null && router.isManualMode.value && router.manualBackend.value == value) ...[
+             const Spacer(),
+             const Icon(Icons.check_circle_rounded, size: 16, color: Colors.green),
+          ]
         ],
       ),
     );
@@ -97,9 +156,9 @@ class BackendStatusBar extends StatelessWidget {
 
   String _backendLabel(InferenceBackend backend) {
     switch (backend) {
-      case InferenceBackend.gemini:   return 'Online (Gemini)';
+      case InferenceBackend.gemini:   return 'Gemini AI';
       case InferenceBackend.ollama:   return 'Ollama LAN';
-      case InferenceBackend.onDevice: return 'On-device AI';
+      case InferenceBackend.onDevice: return 'Local Llama';
     }
   }
 

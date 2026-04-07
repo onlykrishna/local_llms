@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -19,6 +20,12 @@ import 'presentation/widgets/app_drawer.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // FEATURE 4: Lock orientation to Portrait only
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
 
   try {
     await GetStorage.init();
