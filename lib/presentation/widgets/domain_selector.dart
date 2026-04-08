@@ -35,7 +35,7 @@ class DomainSelector extends StatelessWidget {
                       domain: domain,
                       isSelected: isSelected,
                       onTap: () {
-                        domainService.setDomain(domain);
+                        domainService.changeDomain(domain);
                         Get.snackbar(
                           '${domain.label} Mode',
                           'Switched to ${domain.label} mode. Next message will be domain-scoped.',

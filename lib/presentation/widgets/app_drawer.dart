@@ -203,11 +203,11 @@ class _BackendStatusCard extends StatelessWidget {
                       style: TextStyle(color: _color.withOpacity(0.6), fontSize: 10, fontWeight: FontWeight.bold),
                     ),
                     Text(
-                      _label,
+                      _getLabel(Get.find<SettingsService>().modelLabel),
                       style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold, fontSize: 16),
                     ),
                     Text(
-                      _subtitle,
+                      _getSubtitle(backend, Get.find<SettingsService>().selectedModel.value),
                       style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 11),
                     ),
                   ],
@@ -228,19 +228,21 @@ class _BackendStatusCard extends StatelessWidget {
     }
   }
 
-  String get _label {
+  String _getLabel(String modelLabel) {
     switch (backend) {
       case InferenceBackend.gemini:   return 'Gemini Flash';
       case InferenceBackend.ollama:   return 'Ollama LAN';
-      case InferenceBackend.onDevice: return 'Local Llama';
+      case InferenceBackend.onDevice: return modelLabel;
     }
   }
 
-  String get _subtitle {
+  String _getSubtitle(InferenceBackend backend, String modelPath) {
     switch (backend) {
       case InferenceBackend.gemini:   return 'Online · High precision';
       case InferenceBackend.ollama:   return 'Network · Private host';
-      case InferenceBackend.onDevice: return 'Offline · 1.0B Parameter';
+      case InferenceBackend.onDevice: 
+        final isPhi = modelPath.toLowerCase().contains('phi');
+        return isPhi ? 'Offline · 3.8B Parameter' : 'Offline · 1.0B Parameter';
     }
   }
 }

@@ -102,9 +102,11 @@ class OnDeviceInferenceService extends GetxService {
     try {
       _backend = LlamaBackend();
       
-      final mParams = const ModelParams(
-        contextSize: 512, // Reduced from 2048 to lower memory footprint on budget devices
+      final mParams = ModelParams(
+        contextSize: 512, 
         gpuLayers: 0, 
+        numberOfThreads: Platform.numberOfProcessors,
+        batchSize: 512, 
         preferredBackend: GpuBackend.cpu,
       );
 
@@ -182,8 +184,8 @@ class OnDeviceInferenceService extends GetxService {
 
       final gParams = const GenerationParams(
         maxTokens: 512,
-        temp: 0.7,
-        topP: 0.9,
+        temp: 0.2, // Reduced from 0.7 for factual precision
+        topP: 0.4, // Targeted greedyish decoding
         penalty: 1.1,
         topK: 40,
       );

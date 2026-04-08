@@ -15,20 +15,27 @@ class SettingsService extends GetxService {
   // Model path for llamadart (GGUF)
   final selectedModel = ''.obs; // Empty by default to trigger 'Not configured' UI
 
+  final enableDomainValidation = true.obs;
+
   Future<SettingsService> init() async {
     ollamaIp.value = _storage.read('ollama_ip') ?? '192.168.1.100';
     ollamaPort.value = _storage.read('ollama_port') ?? '11434';
-    
-    // Use environment define as fallback for release builds
     const envKey = String.fromEnvironment('GEMINI_KEY');
     geminiApiKey.value = _storage.read('gemini_key') ?? envKey;
-    
     isDarkMode.value = _storage.read('is_dark_mode') ?? false;
     contextWindow.value = _storage.read('context_window') ?? 10;
     selectedModel.value = _storage.read(AppConstants.modelPathKey) ?? '';
     
+    // FEATURE FLAG (Scenario 7)
+    enableDomainValidation.value = _storage.read('enable_domain_validation') ?? true;
+    
     _applyTheme();
     return this;
+  }
+
+  void updateDomainValidation(bool val) {
+    enableDomainValidation.value = val;
+    _storage.write('enable_domain_validation', val);
   }
 
   void updateOllamaIp(String val) {
@@ -49,6 +56,14 @@ class SettingsService extends GetxService {
   void updateModel(String path) {
     selectedModel.value = path;
     _storage.write(AppConstants.modelPathKey, path);
+  }
+
+  String get modelLabel {
+    final path = selectedModel.value.toLowerCase();
+    if (path.isEmpty) return 'No Engine';
+    if (path.contains('phi')) return 'Local Phi-3';
+    if (path.contains('llama')) return 'Local Llama';
+    return 'Local AI';
   }
 
   void toggleDarkMode(bool val) {

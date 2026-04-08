@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import '../../domain/services/inference_router.dart';
 import '../../domain/services/domain_service.dart';
 import '../../domain/models/inference_domain.dart';
+import '../../core/services/settings_service.dart';
 
 class BackendStatusBar extends StatelessWidget {
   const BackendStatusBar({super.key});
@@ -31,9 +32,6 @@ class BackendStatusBar extends StatelessWidget {
               offset: const Offset(0, 30),
               tooltip: 'Choose AI Engine',
               onSelected: (InferenceBackend b) {
-                if (b == InferenceBackend.onDevice) { // Simplified: actually let's just make a specific entry for 'Auto'
-                   // I'll add an 'Auto' option below
-                }
                 router.setManualBackend(b);
               },
               itemBuilder: (context) => [
@@ -62,7 +60,9 @@ class BackendStatusBar extends StatelessWidget {
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    isManual ? '${_backendLabel(backend)} (Locked)' : _backendLabel(backend),
+                    isManual 
+                        ? '${_backendLabel(backend, Get.find<SettingsService>().modelLabel)} (Locked)' 
+                        : _backendLabel(backend, Get.find<SettingsService>().modelLabel),
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
@@ -124,7 +124,7 @@ class BackendStatusBar extends StatelessWidget {
   ) {
     final router = Get.find<InferenceRouterService>();
     return PopupMenuItem<InferenceBackend>(
-      value: value ?? InferenceBackend.onDevice, // dummy if auto
+      value: value ?? InferenceBackend.onDevice,
       onTap: isAuto ? () => router.resetToAuto() : null,
       child: Row(
         children: [
@@ -154,11 +154,11 @@ class BackendStatusBar extends StatelessWidget {
     }
   }
 
-  String _backendLabel(InferenceBackend backend) {
+  String _backendLabel(InferenceBackend backend, String currentLocalModel) {
     switch (backend) {
       case InferenceBackend.gemini:   return 'Gemini AI';
       case InferenceBackend.ollama:   return 'Ollama LAN';
-      case InferenceBackend.onDevice: return 'Local Llama';
+      case InferenceBackend.onDevice: return currentLocalModel;
     }
   }
 

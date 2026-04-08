@@ -6,7 +6,9 @@ import '../../domain/entities/chat_message.dart';
 import '../../domain/repositories/chat_repository.dart';
 import '../../domain/services/inference_router.dart';
 import '../../domain/services/domain_service.dart';
+import '../../domain/services/expert_knowledge_base.dart';
 import '../../core/services/settings_service.dart';
+import '../../domain/models/inference_domain.dart';
 
 enum MessageState { idle, thinking, streaming, cancelled, done, error }
 
@@ -52,21 +54,39 @@ class ChatController extends GetxController {
   }
 
   // ---------------------------------------------------------------------------
-  // SEND MESSAGE (cancel-safe)
+  // SEND MESSAGE (Step 2: Domain Enforcement)
   // ---------------------------------------------------------------------------
-  Future<void> sendMessage() async {
+  Future<void> sendMessage({bool skipGuard = false}) async {
     final text = inputController.text.trim();
     if (text.isEmpty) return;
 
-    // FEATURE 3: Greeting interception for All domain categories
+    // SCENARIO 5: Greeting Interception (Scenario 5.1/5.2)
+    // Runs before domain validation for < 50ms UX.
     if (_isCommonGreeting(text)) {
       _handleInterception(text);
       return;
     }
 
+    // STEP 2: Intent Validation (Before Inference)
+    final validation = _domainService.detectQueryDomain(text);
+    if (!skipGuard && _settings.enableDomainValidation.value) {
+      if (!validation.isMatched && validation.confidence >= 0.6) {
+        _showDomainSwitchPrompt(text, validation.detectedDomain, validation.confidence);
+        return;
+      }
+    }
+
     if (isGenerating.value) {
       _cancelCurrentResponse(keepPartial: true);
       await Future.delayed(const Duration(milliseconds: 150));
+    }
+
+    // SCENARIO 3: Neural Expert Knowledge Base (Ground Truth Short-Circuit)
+    // If the query matches a high-profile entity, provide zero-latency expert answer.
+    final expertAnswer = ExpertKnowledgeBase.probe(text, _domainService.selectedDomain.value);
+    if (expertAnswer != null) {
+        _handleExpertInterception(text, expertAnswer);
+        return;
     }
 
     inputController.clear();
@@ -90,16 +110,17 @@ class ChatController extends GetxController {
         .reversed
         .toList();
 
-    final systemPrompt = _domainService.getSystemPrompt();
+    // STEP 3: Domain-Aware Routing
+    final selectedDomain = _domainService.selectedDomain.value;
     
-    final stream = _router.respond(
+    final stream = _router.probeAndRoute(
       userMessage: text,
-      systemPrompt: systemPrompt,
+      selectedDomain: selectedDomain,
       history: history,
     ).timeout(
       const Duration(seconds: 360),
       onTimeout: (sink) {
-        sink.addError('Response timed out. Please check your connectivity or model status.');
+        sink.addError('Connection Timed Out.');
         sink.close();
       },
     );
@@ -115,7 +136,16 @@ class ChatController extends GetxController {
       onDone: () async {
         currentMessageState.value = MessageState.done;
         isGenerating.value = false;
-        final aiMsg = ChatMessage(id: placeholderId, content: _responseBuffer.toString(), isUser: false);
+        
+        String finalText = _responseBuffer.toString();
+        
+        // STEP 4: Post-Inference Guardrail (Experimental)
+        final isValid = _router.validateResponseRelevance(finalText, selectedDomain);
+        if (!isValid && selectedDomain != InferenceDomain.general) {
+            finalText += '\n\n[⚠️ Semantic Relevance < 0.5: Please verify domain accuracy.]';
+        }
+
+        final aiMsg = ChatMessage(id: placeholderId, content: finalText, isUser: false);
         messages.insert(0, aiMsg);
         await _repository.saveMessage(aiMsg);
         currentResponseText.value = '';
@@ -134,10 +164,56 @@ class ChatController extends GetxController {
     );
   }
 
-  // Intercept common greetings to avoid unnecessary AI routing latency
+  void _showDomainSwitchPrompt(String text, InferenceDomain detected, double confidence) {
+    Get.snackbar(
+      'Expert Domain Mismatch',
+      'This query fits the ${detected.label} Persona (Score: ${(confidence * 100).toInt()}). Switch for expert results?',
+      snackPosition: SnackPosition.BOTTOM,
+      backgroundColor: Colors.indigoAccent.withOpacity(0.95),
+      colorText: Colors.white,
+      duration: const Duration(seconds: 8),
+      mainButton: TextButton(
+        onPressed: () {
+          _domainService.changeDomain(detected);
+          Get.back(); // Dismiss Snackbar
+          inputController.text = text; // Restore for retry
+          sendMessage(skipGuard: true); // Force bypass validation for the retried message
+        },
+        child: const Text('SWITCH', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      ),
+    );
+  }
+
   bool _isCommonGreeting(String text) {
     final greetings = {'hi', 'hello', 'hey', 'namaste', 'hlo', 'hii', 'hi there', 'hello there', 'greeting', 'greetings'};
     return greetings.contains(text.toLowerCase());
+  }
+
+  void _handleExpertInterception(String text, String response) async {
+    inputController.clear();
+    final userMsg = ChatMessage(id: _uuid.v4(), content: text, isUser: true);
+    messages.insert(0, userMsg);
+    _repository.saveMessage(userMsg);
+
+    isGenerating.value = true;
+    currentMessageState.value = MessageState.streaming;
+
+    final words = response.split(' ');
+    for (var i = 0; i < words.length; i++) {
+        await Future.delayed(const Duration(milliseconds: 25));
+        _responseBuffer.write('${words[i]} ');
+        currentResponseText.value = _responseBuffer.toString();
+        _scrollToBottom();
+    }
+
+    final aiMsg = ChatMessage(id: _uuid.v4(), content: response, isUser: false);
+    messages.insert(0, aiMsg);
+    await _repository.saveMessage(aiMsg);
+    
+    currentResponseText.value = '';
+    _responseBuffer.clear();
+    isGenerating.value = false;
+    currentMessageState.value = MessageState.done;
   }
 
   void _handleInterception(String text) async {
@@ -150,7 +226,6 @@ class ChatController extends GetxController {
     currentMessageState.value = MessageState.streaming;
     
     final domainName = _domainService.selectedDomain.value.name.capitalizeFirst;
-    // Virtual streaming for instant feedback
     final response = 'Hello! I am your Ethereal Intelligence. How can I assist you in the $domainName domain today?';
     final words = response.split(' ');
     

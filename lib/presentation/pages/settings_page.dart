@@ -230,7 +230,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   Text('AI Model Environment', style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold)),
                   Obx(() => Text(
                     s.selectedModel.value.isNotEmpty && File(s.selectedModel.value).existsSync() 
-                        ? 'Llama 3.2 1B Active' : 'No local model found',
+                        ? '${s.modelLabel} Active' : 'No local model found',
                     style: TextStyle(color: (s.selectedModel.value.isNotEmpty && File(s.selectedModel.value).existsSync()) ? const Color(0xFF00E475) : const Color(0xFFFFB4AB), fontSize: 12),
                   )),
                 ],

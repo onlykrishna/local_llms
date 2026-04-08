@@ -7,14 +7,21 @@ import '../../data/datasources/gemini_datasource.dart';
 import '../../core/services/settings_service.dart';
 import '../services/domain_service.dart';
 import '../services/on_device_inference_service.dart';
+import '../models/inference_domain.dart';
 
 enum InferenceBackend { ollama, gemini, onDevice }
 
-/// Smart 3-layer Inference Router with Manual Override capability.
+/// Detection result for domain mismatch (Legacy support)
+class DomainDetection {
+  final InferenceDomain? detectedDomain;
+  final double confidence;
+  DomainDetection({this.detectedDomain, this.confidence = 0.0});
+}
+
+/// Smart 3-layer Inference Router with Domain-Aware Prompting.
 class InferenceRouterService extends GetxService {
   final Rx<InferenceBackend> currentBackend = InferenceBackend.onDevice.obs;
   
-  // FEATURE 3: Manual Switching State
   final RxBool isManualMode = false.obs;
   final Rx<InferenceBackend> manualBackend = InferenceBackend.gemini.obs;
 
@@ -43,6 +50,65 @@ class InferenceRouterService extends GetxService {
     isManualMode.value = false;
   }
 
+  // STEP 3: Domain-specific system prompts (as per Prompt Specs)
+  static const Map<InferenceDomain, String> domainSystemPrompts = {
+     InferenceDomain.health: 'You are a health and wellness advisor. Provide accurate, science-backed health information. Always recommend consulting healthcare professionals for medical emergencies.',
+     InferenceDomain.bollywood: 'You are an expert in Indian cinema and Bollywood culture. Provide detailed information about movies, actors, and entertainment industry trends.',
+     InferenceDomain.education: 'You are an education specialist. Help students with academic concepts, study strategies, and learning resources. Be encouraging and clear.',
+     InferenceDomain.general: 'You are a helpful, knowledgeable AI assistant. Provide accurate, balanced information on any topic.'
+  };
+
+  /// Main entry point (probeAndRoute)
+  /// Backwards Compatibility: selectedDomain defaults to 'General' (Scenario 1)
+  Stream<String> probeAndRoute({
+    required String userMessage,
+    InferenceDomain selectedDomain = InferenceDomain.general,
+    required List<Map<String, dynamic>> history,
+  }) async* {
+    yield '⏳ Probing environment...';
+    
+    final backend = await _resolveBackend();
+    currentBackend.value = backend;
+
+    // STEP 3.3: Prepend the domain-specific system prompt
+    final systemPrompt = domainSystemPrompts[selectedDomain] ?? domainSystemPrompts[InferenceDomain.general]!;
+    final domainName = selectedDomain.name;
+
+    switch (backend) {
+      case InferenceBackend.ollama:
+        yield* _streamOllama(userMessage, systemPrompt, history);
+        break;
+      case InferenceBackend.gemini:
+        try {
+          yield* _gemini.streamChat(
+            apiKey: _settings.geminiApiKey.value,
+            userMessage: userMessage,
+            systemPrompt: systemPrompt,
+            history: history,
+          );
+        } catch (e) {
+             currentBackend.value = InferenceBackend.onDevice;
+             yield* _onDevice.respond(userMessage, systemPrompt, domainName);
+        }
+        break;
+      case InferenceBackend.onDevice:
+        yield* _onDevice.respond(userMessage, systemPrompt, domainName);
+        break;
+    }
+  }
+
+  /// STEP 4: Response Consistency Guardrails (Scenario 1)
+  bool validateResponseRelevance(String responseText, InferenceDomain domain) {
+    final text = responseText.toLowerCase();
+    if (domain == InferenceDomain.general) return true;
+
+    // Use keywords defined in DomainService (via static const exposure)
+    final domainKeywords = DomainService.domainKeywords[domain] ?? [];
+    if (domainKeywords.isEmpty) return true;
+
+    return domainKeywords.any(text.contains);
+  }
+
   Future<bool> _isOllamaReachable() async {
     try {
       final ip = _settings.ollamaIp.value;
@@ -69,50 +135,12 @@ class InferenceRouterService extends GetxService {
 
   Future<InferenceBackend> _resolveBackend() async {
     if (isManualMode.value) return manualBackend.value;
-
     final ollamaReady = await _isOllamaReachable();
     if (ollamaReady) return InferenceBackend.ollama;
-
     final hasInternet = await _hasInternet();
     final hasGeminiKey = _settings.geminiApiKey.value.isNotEmpty;
     if (hasInternet && hasGeminiKey) return InferenceBackend.gemini;
-
     return InferenceBackend.onDevice;
-  }
-
-  Stream<String> respond({
-    required String userMessage,
-    required String systemPrompt,
-    required List<Map<String, dynamic>> history,
-  }) async* {
-    yield '⏳ Routing request...';
-    
-    final backend = await _resolveBackend();
-    currentBackend.value = backend;
-    final domainName = _domainService.selectedDomain.value.name;
-
-    switch (backend) {
-      case InferenceBackend.ollama:
-        yield* _streamOllama(userMessage, systemPrompt, history);
-        break;
-      case InferenceBackend.gemini:
-        try {
-          yield* _gemini.streamChat(
-            apiKey: _settings.geminiApiKey.value,
-            userMessage: userMessage,
-            systemPrompt: systemPrompt,
-            history: history,
-          );
-        } catch (e) {
-             print('>>> ROUTER: Gemini error: $e. Falling back to OnDevice');
-             currentBackend.value = InferenceBackend.onDevice;
-             yield* _onDevice.respond(userMessage, systemPrompt, domainName);
-        }
-        break;
-      case InferenceBackend.onDevice:
-        yield* _onDevice.respond(userMessage, systemPrompt, domainName);
-        break;
-    }
   }
 
   Stream<String> _streamOllama(

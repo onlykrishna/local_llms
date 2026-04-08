@@ -26,30 +26,35 @@ class ChatPage extends GetView<ChatController> {
           const BackendStatusBar(),
           
           Expanded(
-            child: Obx(() => ListView.builder(
-              controller: controller.scrollController,
-              reverse: true, // Reversed for messaging behavior
-              physics: const BouncingScrollPhysics(),
-              itemCount: controller.messages.length + (controller.isGenerating.value ? 1 : 0),
-              padding: const EdgeInsets.only(bottom: 24, top: 12),
-              itemBuilder: (context, index) {
-                if (index == 0 && controller.isGenerating.value) {
-                  if (controller.currentResponseText.value.isEmpty) {
-                    return Animate(child: const TypingIndicator())
-                        .fadeIn(duration: 400.ms)
-                        .slideY(begin: 0.1, end: 0);
-                  } else {
-                    return Animate(child: _StreamingBubble(controller: controller))
-                        .fadeIn(duration: 300.ms);
+            child: Obx(() {
+              if (controller.messages.isEmpty && !controller.isGenerating.value) {
+                return const _EmptyChatView();
+              }
+              return ListView.builder(
+                controller: controller.scrollController,
+                reverse: true, 
+                physics: const BouncingScrollPhysics(),
+                itemCount: controller.messages.length + (controller.isGenerating.value ? 1 : 0),
+                padding: const EdgeInsets.only(bottom: 24, top: 12),
+                itemBuilder: (context, index) {
+                  if (index == 0 && controller.isGenerating.value) {
+                    if (controller.currentResponseText.value.isEmpty) {
+                      return Animate(child: const TypingIndicator())
+                          .fadeIn(duration: 400.ms)
+                          .slideY(begin: 0.1, end: 0);
+                    } else {
+                      return Animate(child: _StreamingBubble(controller: controller))
+                          .fadeIn(duration: 300.ms);
+                    }
                   }
-                }
-                final msgIndex = controller.isGenerating.value ? index - 1 : index;
-                final msg = controller.messages[msgIndex];
-                return Animate(child: MessageBubble(message: msg))
-                    .fadeIn(duration: 400.ms)
-                    .slideX(begin: msg.isUser ? 0.05 : -0.05, end: 0);
-              },
-            )),
+                  final msgIndex = controller.isGenerating.value ? index - 1 : index;
+                  final msg = controller.messages[msgIndex];
+                  return Animate(child: MessageBubble(message: msg))
+                      .fadeIn(duration: 400.ms)
+                      .slideX(begin: msg.isUser ? 0.05 : -0.05, end: 0);
+                },
+              );
+            }),
           ),
           _buildInputArea(context),
         ],
@@ -186,6 +191,76 @@ class _StreamingBubble extends StatelessWidget {
                 ),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyChatView extends StatelessWidget {
+  const _EmptyChatView();
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Premium Breathing 3D Node Representation
+            Container(
+              padding: const EdgeInsets.all(28),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: theme.colorScheme.primary.withOpacity(0.05),
+                border: Border.all(color: theme.colorScheme.primary.withOpacity(0.1)),
+                boxShadow: [
+                  BoxShadow(
+                    color: theme.colorScheme.primary.withOpacity(0.1),
+                    blurRadius: 40,
+                    spreadRadius: 2,
+                  )
+                ],
+              ),
+              child: Icon(Icons.auto_awesome, size: 72, color: theme.colorScheme.primary.withOpacity(0.6)),
+            ).animate(onPlay: (c) => c.repeat(reverse: true))
+             .scale(duration: const Duration(seconds: 2), begin: const Offset(1, 1), end: const Offset(1.15, 1.15))
+             .fadeIn(duration: 800.ms),
+            
+            const SizedBox(height: 48),
+            Text(
+              'Neutral Intelligence Ready',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w900,
+                color: theme.colorScheme.onSurface,
+                letterSpacing: -1.0,
+              ),
+            ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.3, end: 0),
+            
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 56),
+              child: Text(
+                'Select a domain node below to begin zero-latency local synthesis. All intelligence remains on-device.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: theme.colorScheme.onSurfaceVariant.withOpacity(0.5),
+                  height: 1.6,
+                ),
+              ),
+            ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.3, end: 0),
+            
+            const SizedBox(height: 44),
+            // Subtle cue for the input area
+            Icon(Icons.keyboard_arrow_down_rounded, color: theme.colorScheme.primary.withOpacity(0.3))
+              .animate(onPlay: (c) => c.repeat())
+              .move(duration: 800.ms, begin: const Offset(0, 0), end: const Offset(0, 10))
+              .fadeOut(duration: 800.ms),
           ],
         ),
       ),
