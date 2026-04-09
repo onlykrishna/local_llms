@@ -9,6 +9,7 @@ import '../../domain/repositories/chat_repository.dart';
 import '../../domain/services/inference_router.dart';
 import '../../domain/services/domain_service.dart';
 import '../controllers/chat_controller.dart';
+import '../controllers/model_manager_controller.dart';
 import '../../core/constants/app_constants.dart';
 
 class ChatBinding extends Bindings {
@@ -24,5 +25,8 @@ class ChatBinding extends Bindings {
 
     // Controller (now uses InferenceRouterService)
     Get.put(ChatController(repository));
+    
+    // Model Manager (Late Init)
+    Get.lazyPut(() => ModelManagerController());
   }
 }

@@ -7,16 +7,10 @@ import '../../data/datasources/gemini_datasource.dart';
 import '../../core/services/settings_service.dart';
 import '../services/domain_service.dart';
 import '../services/on_device_inference_service.dart';
+import '../services/factual_hardening_service.dart';
 import '../models/inference_domain.dart';
 
 enum InferenceBackend { ollama, gemini, onDevice }
-
-/// Detection result for domain mismatch (Legacy support)
-class DomainDetection {
-  final InferenceDomain? detectedDomain;
-  final double confidence;
-  DomainDetection({this.detectedDomain, this.confidence = 0.0});
-}
 
 /// Smart 3-layer Inference Router with Domain-Aware Prompting.
 class InferenceRouterService extends GetxService {
@@ -31,12 +25,10 @@ class InferenceRouterService extends GetxService {
   CancelToken? _ollamaCancelToken;
   late SettingsService _settings;
   late OnDeviceInferenceService _onDevice;
-  late DomainService _domainService;
 
   Future<InferenceRouterService> init() async {
     _settings = Get.find<SettingsService>();
     _onDevice = Get.find<OnDeviceInferenceService>();
-    _domainService = Get.find<DomainService>();
     return this;
   }
 
@@ -50,59 +42,218 @@ class InferenceRouterService extends GetxService {
     isManualMode.value = false;
   }
 
-  // STEP 3: Domain-specific system prompts (as per Prompt Specs)
   static const Map<InferenceDomain, String> domainSystemPrompts = {
-     InferenceDomain.health: 'You are a health and wellness advisor. Provide accurate, science-backed health information. Always recommend consulting healthcare professionals for medical emergencies.',
-     InferenceDomain.bollywood: 'You are an expert in Indian cinema and Bollywood culture. Provide detailed information about movies, actors, and entertainment industry trends.',
-     InferenceDomain.education: 'You are an education specialist. Help students with academic concepts, study strategies, and learning resources. Be encouraging and clear.',
-     InferenceDomain.general: 'You are a helpful, knowledgeable AI assistant. Provide accurate, balanced information on any topic.'
+     InferenceDomain.health: '''Medical Assist Only. Rules:
+1. SAFETY SCAN: If fever >= 103°F or 110°F, output ONLY: "⚠️ MEDICAL ALERT: A fever of [X] is a medical emergency. Go to the nearest emergency room immediately. Do not attempt home treatment." Stop.
+2. IF NOT EMERGENCY structure:
+- Likely meaning (1 sentence)
+- Action (2-3 bullets)
+- Doctor threshold (1 sentence)
+- Source: "Please verify with a licensed medical professional."''',
+     InferenceDomain.bollywood: 'Factual Bollywood historian. Provide specific names, dates, and awards. Avoid conversational filler and generic advice.',
+     InferenceDomain.education: 'Academic assistant. Explain concepts directly and objectively. No conversational padding or tutor-style fluff.',
+     InferenceDomain.general: 'Precise assistant. Direct, objective info. No filler.'
   };
 
-  /// Main entry point (probeAndRoute)
-  /// Backwards Compatibility: selectedDomain defaults to 'General' (Scenario 1)
   Stream<String> probeAndRoute({
     required String userMessage,
     InferenceDomain selectedDomain = InferenceDomain.general,
     required List<Map<String, dynamic>> history,
   }) async* {
-    yield '⏳ Probing environment...';
-    
+    // v3.1: All routing/classification is silent — no status messages yielded to UI
+
+    // 1. GLOBAL SAFETY OVERRIDE (Master v2.0 Section 2 — P1 Fix)
+    final lowerMsg = userMessage.toLowerCase();
+    bool isEmergency = false;
+
+    // Explicit temperature threshold check
+    final tempRegex = RegExp(r'(\d{2,3}(\.\d)?)\s*(f|c|fever|temp)');
+    for (final m in tempRegex.allMatches(lowerMsg)) {
+      double val = double.tryParse(m.group(1) ?? '0') ?? 0;
+      if (val >= 103) isEmergency = true;
+    }
+
+    // Explicit keyword triggers
+    final exactKeywords = [
+      'seizure', 'convulsion', 'unconscious', 'chest pain',
+      'overdose', 'poisoning', 'self-harm', 'bleach', 'ammonia',
+      'cant breathe', "can't breathe", 'not breathing', 'not responding',
+      'too many pills', 'too many tablets', 'took too much',
+    ];
+    if (exactKeywords.any(lowerMsg.contains)) isEmergency = true;
+
+    // Fuzzy pattern triggers (P1 Fix)
+    final fuzzyPatterns = [
+      RegExp(r'burning up'),
+      RegExp(r'very high temp'),
+      RegExp(r'trouble breath|hard to breath|breath.*problem|breathe properly'),
+      RegExp(r'took.*lot.*medic|too much.*medic'),
+      RegExp(r'mixing clean|mixing chem|household chem|cleaning product'),
+      RegExp(r'passed out|blacked out|not waking|won.?t wake'),
+      RegExp(r'(my )?(child|kid|baby).*(fever|temp|burning)'),
+      RegExp(r'hurting myself|hurt myself|want to die|end my life'),
+    ];
+    if (fuzzyPatterns.any((p) => p.hasMatch(lowerMsg))) isEmergency = true;
+
+    if (isEmergency) {
+      yield '⚠️ MEDICAL ALERT:\nThis is a medical emergency requiring immediate attention.\nCall emergency services or go to the nearest emergency room right now.\nDo not attempt home treatment.\n[Source: Please consult emergency medical services immediately]\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n--- END ---';
+      return;
+    }
+
+    // 2. BACKEND RESOLUTION
     final backend = await _resolveBackend();
     currentBackend.value = backend;
-
-    // STEP 3.3: Prepend the domain-specific system prompt
-    final systemPrompt = domainSystemPrompts[selectedDomain] ?? domainSystemPrompts[InferenceDomain.general]!;
+    final hardening = Get.find<FactualHardeningService>();
     final domainName = selectedDomain.name;
 
-    switch (backend) {
-      case InferenceBackend.ollama:
-        yield* _streamOllama(userMessage, systemPrompt, history);
-        break;
-      case InferenceBackend.gemini:
-        try {
+    try {
+      switch (backend) {
+        case InferenceBackend.ollama:
+          final systemPrompt = hardening.getConsolidatedSystemPrompt();
+          yield* _streamOllama(userMessage, systemPrompt, history);
+          break;
+        case InferenceBackend.gemini:
+          final systemPrompt = hardening.getConsolidatedSystemPrompt();
           yield* _gemini.streamChat(
             apiKey: _settings.geminiApiKey.value,
             userMessage: userMessage,
             systemPrompt: systemPrompt,
             history: history,
           );
-        } catch (e) {
-             currentBackend.value = InferenceBackend.onDevice;
-             yield* _onDevice.respond(userMessage, systemPrompt, domainName);
-        }
-        break;
-      case InferenceBackend.onDevice:
-        yield* _onDevice.respond(userMessage, systemPrompt, domainName);
-        break;
+          break;
+        case InferenceBackend.onDevice:
+          // v3.1: SILENT intent classification (Master Section 4)
+          String protocol = 'DIRECT';
+
+          // PRIORITY 2 — NEGATION TRAP (before FACT_BLOCK)
+          final negationPattern = RegExp(r'\b(not|never|wasn.?t|isn.?t|didn.?t|incorrect|wrong|not true|didn.?t happen)\b');
+          if (negationPattern.hasMatch(lowerMsg) && lowerMsg.contains('?')) {
+            protocol = 'NEGATION_TRAP';
+          // PRIORITY 3 — SPLITTER (fact + opinion)
+          } else if (RegExp(r'\b(best|worst|greatest|should|think|feel|believe|rating)\b').hasMatch(lowerMsg)
+              && RegExp(r'\b(won|award|year|date|who|how many)\b').hasMatch(lowerMsg)) {
+            protocol = 'SPLITTER';
+          // PRIORITY 4 — FACT_BLOCK: Filmfare awards OR Bollywood domain with specific fact query
+          } else if (lowerMsg.contains('filmfare') || lowerMsg.contains('awards') ||
+              (selectedDomain == InferenceDomain.bollywood &&
+               RegExp(r'\b(who|when|which|what year|born|debut|box office|highest|record|won|directed|produced|release)\b').hasMatch(lowerMsg))) {
+            protocol = 'FACT_BLOCK';
+          // PRIORITY 6 — DISGUISED FACTUAL
+          } else if (RegExp(r'^(tell me (about|something)|what do you know about|something about)').hasMatch(lowerMsg)) {
+            protocol = 'UNCERTAINTY_ANCHOR';
+          // PRIORITY 5 — DATE_SENTRY + UNCERTAINTY_ANCHOR
+          } else if (RegExp(r'\d{4}').hasMatch(userMessage)) {
+            protocol = 'UNCERTAINTY_ANCHOR';
+          }
+          // Protocol assigned silently — not yielded to UI
+
+          // v3.1: Use compact prompt for on-device 3B models to prevent context overflow
+          final bool isRag = protocol == 'FACT_BLOCK';
+          final systemPromptToUse = hardening.getCompactSystemPrompt(isRag: isRag);
+
+          // P2 Fix: Full 10-field expanded Filmfare fact block
+          String? factBlock;
+          if (isRag) {
+            if (selectedDomain == InferenceDomain.bollywood && !lowerMsg.contains('filmfare')) {
+              // Bollywood domain RAG — verified facts to prevent hallucination
+              factBlock = '''VERIFIED BOLLYWOOD FACTS (trust 100%, do NOT invent outside this):
+- Highest-grossing Indian film: Dangal (2016) — ₹2,024 crore worldwide
+- Baahubali 2 (2017): ₹1,810 crore worldwide
+- Pathaan (2023): ₹1,050 crore worldwide. Director: Siddharth Anand. Cast: SRK, Deepika, John Abraham
+- DDLJ (1995): Ran 25+ years at Maratha Mandir. Director: Aditya Chopra. Won 10 Filmfare Awards
+- Sholay (1975): Director Ramesh Sippy. Named "Film of the Millennium" by BBC India
+- 3 Idiots (2009): Director Rajkumar Hirani. ₹460 crore worldwide
+- Shah Rukh Khan (SRK): Born Nov 2 1965. Most Filmfare Best Actor awards. Films: DDLJ, Kuch Kuch Hota Hai, Jawan
+- Salman Khan: Born Dec 27 1965. Films: Maine Pyar Kiya, Dabangg, Bajrangi Bhaijaan, Sultan
+- Amitabh Bachchan: Born Oct 11 1942. Films: Sholay, Deewar, Zanjeer, Black. Dadasaheb Phalke Award
+- Aamir Khan: Born Mar 14 1965. Films: Lagaan (Oscar-nominated), Dangal, 3 Idiots, PK
+- Deepika Padukone: Born Jan 5 1986. Debut: Om Shanti Om (2007). Films: Piku, Padmaavat, Pathaan
+- Filmfare Awards first held: March 21 1954. Organizer: Times of India Group. First Best Actor: Dilip Kumar (Daag)
+If the answer is NOT in these facts, respond: "NO_DATA: This model is not yet updated with complete knowledge on this topic. Please refer to an official source."''';
+            } else {
+              // Filmfare-specific fact block
+              factBlock = '''VERIFIED FILMFARE FACTS (1954 ONLY — trust 100%):
+- First ceremony: March 21, 1954
+- Best Actor: Dilip Kumar — film: Daag
+- Best Actress: Meena Kumari — film: Parineeta (NOT Baiju Bawra)
+- Best Film: Do Bigha Zamin
+- Best Director: Bimal Roy — film: Do Bigha Zamin
+- Organized by: The Times of India Group
+- Also called: Black Lady Awards
+If year in question is NOT 1954, say: "MISMATCH: My verified data covers 1954 only."
+If answer not in facts, say: "NO_DATA: This model is not yet updated with complete knowledge on this topic. Please check official Filmfare records."''';
+              final userYearMatch = RegExp(r'\b(19|20)\d{2}\b').firstMatch(userMessage);
+              if (userYearMatch != null && userYearMatch.group(0) != '1954') {
+                yield '❌ MISMATCH: My verified data covers 1954, not ${userYearMatch.group(0)}.\n--- END ---';
+                return;
+              }
+            }
+          }
+
+
+          final finalUserPrompt = hardening.buildFactualPrompt(
+            question: userMessage,
+            factBlock: factBlock,
+          );
+
+          // Track meaningful output to detect silent model failure
+          int meaningfulChunkCount = 0;
+          String? lastErrorChunk;
+
+          // Buffer full response to apply whole-text post-processing
+          final responseBuffer = StringBuffer();
+          await for (final status in _onDevice.respond(finalUserPrompt, systemPromptToUse, domainName)) {
+            if (status.contains('⚠️') || status.contains('❌')) {
+              lastErrorChunk = status;
+              break;
+            }
+            responseBuffer.write(status);
+            meaningfulChunkCount++;
+          }
+
+          if (meaningfulChunkCount > 0) {
+            // Apply full post-processing pipeline on the complete response
+            String full = responseBuffer.toString();
+            full = hardening.sanitizeOutput(full);               // strip tokens
+            full = hardening.stripSystemLeak(full);              // strip echoed prompt
+            full = hardening.enforceFormatCompliance(full);      // fix merged words
+            full = hardening.enforceResponseStructure(full, finalUserPrompt); // rebuild structure
+            full = hardening.addVerificationFlags(full);         // tag dates
+            if (full.trim().isNotEmpty) yield full;
+          }
+
+          // If model produced no content, explain why instead of showing a blank response
+          if (meaningfulChunkCount == 0) {
+            if (lastErrorChunk != null) {
+              yield lastErrorChunk;
+            } else {
+              yield '❌ Model returned no response.\n\n'
+                  'Possible reasons:\n'
+                  '1. Context overflow — question was too long for available model memory.\n'
+                  '2. Model is still loading — please try again in a moment.\n'
+                  '3. Insufficient RAM — close other apps and retry.\n\n'
+                  'Try rephrasing your question more briefly.\n--- END ---';
+              return;
+            }
+          }
+          yield '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n--- END ---';
+          break;
+      }
+    } catch (e) {
+      yield '❌ System Error: $e\n--- END ---';
     }
   }
 
   /// STEP 4: Response Consistency Guardrails (Scenario 1)
   bool validateResponseRelevance(String responseText, InferenceDomain domain) {
-    final text = responseText.toLowerCase();
+    // Pass if general or if it's a known error status
     if (domain == InferenceDomain.general) return true;
+    if (responseText.contains('⚠️') || responseText.contains('❌')) return true;
+    if (responseText.contains('⏳')) return true;
 
-    // Use keywords defined in DomainService (via static const exposure)
+    final text = responseText.toLowerCase();
+
+    // Use keywords defined in DomainService
     final domainKeywords = DomainService.domainKeywords[domain] ?? [];
     if (domainKeywords.isEmpty) return true;
 
@@ -111,11 +262,10 @@ class InferenceRouterService extends GetxService {
 
   Future<bool> _isOllamaReachable() async {
     try {
-      final ip = _settings.ollamaIp.value;
-      final port = _settings.ollamaPort.value;
+      final url = _settings.ollamaServerUrl;
       final probeDio = Dio();
       final resp = await probeDio.get(
-        'http://$ip:$port/api/tags',
+        '$url/api/tags',
         options: Options(
           sendTimeout: const Duration(milliseconds: 1500),
           connectTimeout: const Duration(milliseconds: 1500),
@@ -149,9 +299,8 @@ class InferenceRouterService extends GetxService {
     List<Map<String, dynamic>> history,
   ) async* {
     _ollamaCancelToken = CancelToken();
-    final ip = _settings.ollamaIp.value;
-    final port = _settings.ollamaPort.value;
-    final model = _settings.selectedModel.value;
+    final url = _settings.ollamaServerUrl;
+    final modelId = _settings.selectedModelId.value;
 
     final messages = <Map<String, dynamic>>[
       {'role': 'system', 'content': systemPrompt},
@@ -164,8 +313,8 @@ class InferenceRouterService extends GetxService {
 
     try {
       final response = await _dio.post<ResponseBody>(
-        'http://$ip:$port/api/chat',
-        data: {'model': model, 'messages': messages, 'stream': true},
+        '$url/api/chat',
+        data: {'model': modelId.isEmpty ? 'llama3.2' : modelId, 'messages': messages, 'stream': true},
         options: Options(responseType: ResponseType.stream),
         cancelToken: _ollamaCancelToken,
       );

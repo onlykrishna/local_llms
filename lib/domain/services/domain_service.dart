@@ -45,11 +45,23 @@ class DomainService extends GetxService {
       'blockbuster', 'screenplay', 'nepotism', 'item song', 'box office'
     ],
     InferenceDomain.education: [
+      // Academic
       'school', 'college', 'university', 'exam', 'study', 'course',
       'subject', 'learning', 'assignment', 'tuition', 'physics',
       'math', 'science', 'history', 'geography', 'algebra', 'tutor',
       'degree', 'curriculum', 'knowledge', 'student', 'professor',
-      'entrance', 'syllabus', 'scholarship'
+      'entrance', 'syllabus', 'scholarship', 'lecture', 'research',
+      'jee', 'neet', 'upsc', 'cbse', 'board exam', 'competitive exam',
+      // Programming / Coding
+      'code', 'coding', 'programming', 'software', 'algorithm', 'function',
+      'variable', 'loop', 'array', 'string', 'integer', 'boolean',
+      'class', 'object', 'inheritance', 'polymorphism', 'abstraction',
+      'encapsulation', 'interface', 'abstract', 'oop', 'recursion',
+      'data structure', 'linked list', 'binary tree', 'stack', 'queue',
+      'sorting', 'searching', 'complexity', 'api', 'framework',
+      'flutter', 'dart', 'python', 'java', 'kotlin', 'javascript',
+      'html', 'css', 'sql', 'database', 'compiler', 'debugger',
+      'git', 'github', 'version control', 'machine learning', 'ai',
     ],
     InferenceDomain.general: [] 
   };

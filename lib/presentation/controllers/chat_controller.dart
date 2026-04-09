@@ -70,7 +70,8 @@ class ChatController extends GetxController {
     // STEP 2: Intent Validation (Before Inference)
     final validation = _domainService.detectQueryDomain(text);
     if (!skipGuard && _settings.enableDomainValidation.value) {
-      if (!validation.isMatched && validation.confidence >= 0.6) {
+      // Lowered to 0.5 so single-keyword matches (e.g. 'coding', 'abstract class') trigger the prompt
+      if (!validation.isMatched && validation.confidence >= 0.5) {
         _showDomainSwitchPrompt(text, validation.detectedDomain, validation.confidence);
         return;
       }
@@ -138,12 +139,7 @@ class ChatController extends GetxController {
         isGenerating.value = false;
         
         String finalText = _responseBuffer.toString();
-        
-        // STEP 4: Post-Inference Guardrail (Experimental)
-        final isValid = _router.validateResponseRelevance(finalText, selectedDomain);
-        if (!isValid && selectedDomain != InferenceDomain.general) {
-            finalText += '\n\n[⚠️ Semantic Relevance < 0.5: Please verify domain accuracy.]';
-        }
+        // v3.1: Semantic relevance check removed — caused false positives on valid responses
 
         final aiMsg = ChatMessage(id: placeholderId, content: finalText, isUser: false);
         messages.insert(0, aiMsg);

@@ -7,7 +7,7 @@ import '../../domain/services/domain_service.dart';
 import '../controllers/chat_controller.dart';
 import '../pages/history_page.dart';
 import '../pages/settings_page.dart';
-import '../screens/model_setup_screen.dart';
+import '../pages/model_manager_page.dart';
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
@@ -41,7 +41,7 @@ class AppDrawer extends StatelessWidget {
                   color: theme.colorScheme.primary,
                   onTap: () {
                     Get.back();
-                    Get.to(() => const ModelSetupScreen());
+                    Get.to(() => const ModelManagerPage());
                   },
                 ),
                 _DrawerItem(

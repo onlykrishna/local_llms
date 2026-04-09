@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'aetheric_glow_extension.dart';
 
 class AppTheme {
   // --- Ethereal Intelligence Tokens (Dark) ---
@@ -33,6 +34,16 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: brightness,
+      extensions: [
+        AethericGlowExtension(
+          glassSurface: isDark 
+              ? Colors.white.withOpacity(0.04) 
+              : Colors.black.withOpacity(0.03),
+          glassStroke: isDark 
+              ? Colors.white.withOpacity(0.08) 
+              : Colors.black.withOpacity(0.05),
+        ),
+      ],
       colorScheme: ColorScheme(
         brightness: brightness,
         surface: resolvedSurface,

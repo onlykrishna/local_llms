@@ -12,11 +12,16 @@ import 'core/services/fallback_dataset_service.dart';
 import 'domain/entities/chat_message.dart';
 import 'domain/services/domain_service.dart';
 import 'domain/services/on_device_inference_service.dart';
+import 'domain/services/factual_hardening_service.dart';
 import 'domain/services/inference_router.dart';
 import 'presentation/bindings/chat_binding.dart';
 import 'presentation/pages/chat_page.dart';
 import 'presentation/pages/settings_page.dart';
 import 'presentation/widgets/app_drawer.dart';
+
+import 'domain/entities/download_state.dart';
+import 'domain/services/model_download_service.dart';
+import 'presentation/controllers/model_manager_controller.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,14 +36,20 @@ void main() async {
     await GetStorage.init();
     await Hive.initFlutter();
     Hive.registerAdapter(ChatMessageAdapter());
+    Hive.registerAdapter(DownloadStateAdapter());
+    
     await Hive.openBox<ChatMessage>(AppConstants.chatBoxName);
+    await Hive.openBox<DownloadState>(AppConstants.downloadBoxName);
 
     // Register all services (order matters for dependencies)
     await Get.putAsync(() => SettingsService().init());
+    await Get.putAsync(() => ModelDownloadService().init());
     await Get.putAsync(() => FallbackDatasetService().init());
     await Get.putAsync(() => DomainService().init());
+    Get.put(FactualHardeningService());
     Get.put(OnDeviceInferenceService());
     await Get.putAsync(() => InferenceRouterService().init());
+    Get.lazyPut(() => ModelManagerController());
   } catch (e) {
     debugPrint('🚨 Startup Error: $e');
   }

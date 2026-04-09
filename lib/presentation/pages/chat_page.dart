@@ -255,6 +255,9 @@ class _EmptyChatView extends StatelessWidget {
               ),
             ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.3, end: 0),
             
+            const SizedBox(height: 32),
+            _buildVerifiedQuestions(context),
+
             const SizedBox(height: 44),
             // Subtle cue for the input area
             Icon(Icons.keyboard_arrow_down_rounded, color: theme.colorScheme.primary.withOpacity(0.3))
@@ -264,6 +267,70 @@ class _EmptyChatView extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildVerifiedQuestions(BuildContext context) {
+    final theme = Theme.of(context);
+    final controller = Get.find<ChatController>();
+
+    // Helper: set text and immediately send so user gets an instant answer
+    void ask(String question) {
+      controller.inputController.text = question;
+      controller.sendMessage();
+    }
+
+    return Column(
+      children: [
+        Text(
+          'VERIFIED NEURAL ENTRY POINTS',
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: theme.colorScheme.primary.withOpacity(0.5),
+            letterSpacing: 1.2,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          alignment: WrapAlignment.center,
+          children: [
+            _QuestionChip(
+              label: 'Manage daily stress',
+              onTap: () => ask('What are three strategies to manage daily work stress?'),
+            ),
+            _QuestionChip(
+              label: 'First Filmfare Awards',
+              onTap: () => ask('Who won Best Actor and Best Actress at the first Filmfare Awards in 1954?'),
+            ),
+            _QuestionChip(
+              label: 'Quantum Entanglement',
+              onTap: () => ask('Explain Quantum Entanglement simply for a high school student.'),
+            ),
+          ],
+        ).animate().fadeIn(delay: 600.ms),
+      ],
+    );
+  }
+}
+
+class _QuestionChip extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  const _QuestionChip({required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ActionChip(
+      label: Text(label, style: const TextStyle(fontSize: 11)),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+      backgroundColor: theme.colorScheme.surfaceContainer,
+      labelStyle: TextStyle(color: theme.colorScheme.primary),
+      side: BorderSide(color: theme.colorScheme.primary.withOpacity(0.2)),
+      onPressed: onTap,
     );
   }
 }

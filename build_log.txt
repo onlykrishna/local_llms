@@ -1,0 +1,64 @@
+Warning: Building for device with codesigning disabled. You will have to manually codesign before deploying to device.
+Building com.example.offlineAiFlutterDemo for device (ios-release)...
+Running Xcode build...                                          
+Xcode build done.                                           33.0s
+Failed to build iOS app
+Error output from Xcode build:
+↳
+    ** BUILD FAILED **
+
+
+Xcode's output:
+↳
+    Writing result bundle at path:
+    	/var/folders/dj/x_d31_7x697fbfk6fbb2fffh0000gn/T/flutter_tools.xVxDHW/flutter_ios_build_temp_dir4LrhuQ/temporary_xcresult_bundle
+
+    lib/core/models/model_registry.dart:133:7: Error: Duplicated named argument 'id'.
+          id: 'mistral7b_v03',
+          ^^
+    lib/core/models/model_registry.dart:134:7: Error: Duplicated named argument 'displayName'.
+          displayName: 'Mistral 7B v0.3',
+          ^^^^^^^^^^^
+    lib/core/models/model_registry.dart:135:7: Error: Duplicated named argument 'description'.
+          description: 'The industry favorite 7B model. Solid performance across all benchmarks.',
+          ^^^^^^^^^^^
+    lib/core/models/model_registry.dart:136:7: Error: Duplicated named argument 'sizeLabel'.
+          sizeLabel: '4.1GB',
+          ^^^^^^^^^
+    lib/core/models/model_registry.dart:137:7: Error: Duplicated named argument 'sizeBytes'.
+          sizeBytes: 4402341478,
+          ^^^^^^^^^
+    lib/core/models/model_registry.dart:150:7: Error: Duplicated named argument 'id'.
+          id: 'smollm2_1_7b',
+          ^^
+    lib/core/models/model_registry.dart:151:7: Error: Duplicated named argument 'displayName'.
+          displayName: 'SmolLM2 1.7B',
+          ^^^^^^^^^^^
+    lib/core/models/model_registry.dart:152:7: Error: Duplicated named argument 'description'.
+          description: 'Fast, compact, and consistent for everyday mobile tasks.',
+          ^^^^^^^^^^^
+    lib/core/models/model_registry.dart:153:7: Error: Duplicated named argument 'sizeLabel'.
+          sizeLabel: '1.1GB',
+          ^^^^^^^^^
+    Target kernel_snapshot_program failed: Exception
+    Failed to package /Users/aeologic/StudioProjects/offline_ai_flutter_demo.
+    Command PhaseScriptExecution failed with a nonzero exit code
+    note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'SDWebImage-SDWebImage' from project 'Pods')
+    note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'SwiftyGif-SwiftyGif' from project 'Pods')
+    note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'connectivity_plus-connectivity_plus_privacy' from project 'Pods')
+    note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'SDWebImage' from project 'Pods')
+    note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'SwiftyGif' from project 'Pods')
+    note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'connectivity_plus' from project 'Pods')
+    note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'DKPhotoGallery-DKPhotoGallery' from project 'Pods')
+    note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'DKPhotoGallery' from project 'Pods')
+    note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'DKImagePickerController-DKImagePickerController' from project 'Pods')
+    note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'DKImagePickerController' from project 'Pods')
+    note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'file_picker-file_picker_ios_privacy' from project 'Pods')
+    note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'file_picker' from project 'Pods')
+    note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'Pods-Runner' from project 'Pods')
+    note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'Runner' from project 'Runner')
+    note: Run script build phase 'Run Script' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'Runner' from project 'Runner')
+    note: Run script build phase 'Thin Binary' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'Runner' from project 'Runner')
+    note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'Flutter' from project 'Pods')
+
+Encountered error while building for device.

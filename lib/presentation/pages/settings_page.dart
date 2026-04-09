@@ -3,7 +3,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../core/services/settings_service.dart';
-import '../screens/model_setup_screen.dart';
+import '../bindings/model_manager_binding.dart';
+import 'model_manager_page.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({Key? key}) : super(key: key);
@@ -103,7 +104,7 @@ class _SettingsPageState extends State<SettingsPage> {
             const _SectionHeader(title: 'LOCAL COMPUTE'),
             const SizedBox(height: 20),
 
-            _buildModelCard(theme),
+            _buildModelManagerTile(theme),
 
             const SizedBox(height: 40),
             const _SectionHeader(title: 'PREFERENCES'),
@@ -201,9 +202,9 @@ class _SettingsPageState extends State<SettingsPage> {
     ));
   }
 
-  Widget _buildModelCard(ThemeData theme) {
+  Widget _buildModelManagerTile(ThemeData theme) {
     return InkWell(
-      onTap: () => Get.to(() => const ModelSetupScreen()),
+      onTap: () => Get.to(() => const ModelManagerPage(), binding: ModelManagerBinding()),
       borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: const EdgeInsets.all(16),
@@ -227,11 +228,13 @@ class _SettingsPageState extends State<SettingsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('AI Model Environment', style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold)),
+                  Text('Model Management', style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold)),
                   Obx(() => Text(
-                    s.selectedModel.value.isNotEmpty && File(s.selectedModel.value).existsSync() 
-                        ? '${s.modelLabel} Active' : 'No local model found',
-                    style: TextStyle(color: (s.selectedModel.value.isNotEmpty && File(s.selectedModel.value).existsSync()) ? const Color(0xFF00E475) : const Color(0xFFFFB4AB), fontSize: 12),
+                    s.selectedModelId.value.isNotEmpty ? '${s.modelLabel} Selected' : 'No local model active',
+                    style: TextStyle(
+                      color: s.selectedModelId.value.isNotEmpty ? theme.colorScheme.primary : theme.colorScheme.error, 
+                      fontSize: 12
+                    ),
                   )),
                 ],
               ),

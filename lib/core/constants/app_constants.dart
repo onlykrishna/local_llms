@@ -11,6 +11,7 @@ class AppConstants {
   // Hive boxes
   static const String chatBoxName = 'chat_history';
   static const String settingsBoxName = 'settings';
+  static const String downloadBoxName = 'download_history';
 
   // GetStorage keys
   static const String modelPathKey = 'model_path'; // EXACTLY AS REQUESTED
