@@ -34,16 +34,16 @@ class AppDrawer extends StatelessWidget {
                 Obx(() => _BackendStatusCard(backend: router.currentBackend.value)),
                 const SizedBox(height: 24),
                 
-                _DrawerItem(
-                  icon: Icons.memory_rounded,
-                  label: 'AI Model Setup',
-                  subtitle: 'Optimise GGUF parameters',
-                  color: theme.colorScheme.primary,
-                  onTap: () {
-                    Get.back();
-                    Get.to(() => const ModelManagerPage());
-                  },
-                ),
+                // _DrawerItem(
+                //   icon: Icons.memory_rounded,
+                //   label: 'AI Model Setup',
+                //   subtitle: 'Optimise GGUF parameters',
+                //   color: theme.colorScheme.primary,
+                //   onTap: () {
+                //     Get.back();
+                //     Get.to(() => const ModelManagerPage());
+                //   },
+                // ),
                 _DrawerItem(
                   icon: Icons.history_rounded,
                   label: 'Chat History',
