@@ -32,6 +32,7 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
 
+  // Initial core storage (fast)
   try {
     await GetStorage.init();
     await Hive.initFlutter();
@@ -40,21 +41,36 @@ void main() async {
     
     await Hive.openBox<ChatMessage>(AppConstants.chatBoxName);
     await Hive.openBox<DownloadState>(AppConstants.downloadBoxName);
+  } catch (e) {
+    debugPrint('🚨 Storage Init Error: $e');
+  }
 
-    // Register all services (order matters for dependencies)
-    await Get.putAsync(() => SettingsService().init());
-    await Get.putAsync(() => ModelDownloadService().init());
-    await Get.putAsync(() => FallbackDatasetService().init());
-    await Get.putAsync(() => DomainService().init());
+  // Start service initialization
+  await _initServices();
+
+  runApp(const OfflineAIDemoApp());
+}
+
+Future<void> _initServices() async {
+  try {
+    // These can run in parallel
+    await Future.wait([
+      Get.putAsync(() => SettingsService().init()).timeout(const Duration(seconds: 15)),
+      Get.putAsync(() => ModelDownloadService().init()).timeout(const Duration(seconds: 15)),
+      Get.putAsync(() => FallbackDatasetService().init()).timeout(const Duration(seconds: 15)),
+      Get.putAsync(() => DomainService().init()).timeout(const Duration(seconds: 15)),
+    ]);
+
+    // These depend on the ones above
     Get.put(FactualHardeningService());
     Get.put(OnDeviceInferenceService());
     await Get.putAsync(() => InferenceRouterService().init());
     Get.lazyPut(() => ModelManagerController());
+    
+    debugPrint('✅ All services initialized in background');
   } catch (e) {
-    debugPrint('🚨 Startup Error: $e');
+    debugPrint('🚨 Background Service Init Error: $e');
   }
-
-  runApp(const OfflineAIDemoApp());
 }
 
 class OfflineAIDemoApp extends StatelessWidget {

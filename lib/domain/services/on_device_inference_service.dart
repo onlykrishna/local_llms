@@ -86,31 +86,36 @@ class OnDeviceInferenceService extends GetxService {
     try {
       _backend = LlamaBackend();
       
-      // Dynamically scale context to fit 'Fact Blocks' vs RAM limits
       bool isVeryLarge = modelPath.contains('3b') || modelPath.contains('4b') || 
-                         modelPath.contains('12b') || modelPath.contains('27b');
-      
+                         modelPath.contains('7b') || modelPath.contains('8b') ||
+                         modelPath.contains('12b') || modelPath.contains('27b') ||
+                         modelPath.contains('e2b') || modelPath.contains('e4b') ||
+                         modelPath.contains('phi-4-mini') || modelPath.contains('qwen2.5-3b');
+
+      // v3.2: Use 4 threads for iOS performance and allow auto backend (Metal)
       final mParams = ModelParams(
         contextSize: isVeryLarge ? 512 : 1024, 
-        gpuLayers: 0, 
-        numberOfThreads: 2,
+        gpuLayers: Platform.isIOS ? 99 : 0, // Enable Metal on iOS
+        numberOfThreads: 4, 
         batchSize: 512, 
-        preferredBackend: GpuBackend.cpu,
+        preferredBackend: GpuBackend.auto,
       );
 
-      debugPrint('>>> ONDEVICE: loading model: $modelPath (Large=$isVeryLarge)');
+      debugPrint('>>> ONDEVICE: Loading model: $modelPath (Large=$isVeryLarge)');
       _modelHandle = await _backend!.modelLoad(modelPath, mParams)
           .timeout(const Duration(seconds: 300));
 
+      debugPrint('>>> ONDEVICE: Creating context...');
       _contextHandle = await _backend!.contextCreate(_modelHandle!, mParams);
 
       _isInitialized = true;
       _initializedDomain = domainName;
       _initializedModelPath = modelPath;
       isModelReady.value = true;
+      debugPrint('>>> ONDEVICE: Initialization complete.');
       return true;
-    } catch (e) {
-      debugPrint('>>> ONDEVICE: init error = $e');
+    } catch (e, stack) {
+      debugPrint('>>> ONDEVICE: Init error: $e\n$stack');
       await _disposeHandles();
       return false;
     } finally {
@@ -130,7 +135,7 @@ class OnDeviceInferenceService extends GetxService {
 
     final isFirstLoadForThisModel = !isModelReady.value || _initializedModelPath != currentPath;
     if (isFirstLoadForThisModel) {
-      // v3.1: Silent init — model path not shown to user
+      yield '🔄 Initializing local engine...\n(This can take 10-30s for large models)';
     }
 
     try {
@@ -138,29 +143,32 @@ class OnDeviceInferenceService extends GetxService {
         const Duration(seconds: 300),
       );
 
-      if (!ok) {
-        final pathLower = currentPath.toLowerCase();
-        final isLargeModel = pathLower.contains('3b') || pathLower.contains('4b') ||
-            pathLower.contains('7b') || pathLower.contains('8b') ||
-            pathLower.contains('12b') || pathLower.contains('13b') || pathLower.contains('27b');
-        if (Platform.isIOS && isLargeModel) {
-          yield '⚠️ iOS RAM Limit Reached\n\n'
-              'The LLaMA 3.2 3B model (~2GB) exceeds the memory budget '
-              'iOS allows for individual apps on this device.\n\n'
-              'Fix: Go to Settings → Manage Models → download the 1B model (~600MB) '
-              'which runs reliably on all iPhones.\n--- END ---';
-        } else {
-          yield '⚠️ Failed to launch local engine.\n\n'
-              'Possible causes:\n'
-              '1. iOS denied the RAM request (close other apps and retry)\n'
-              '2. Model file may be corrupted (re-download in Settings)\n'
-              '3. Device storage is full\n\n'
-              'Go to Settings → Manage Models to verify or re-download.\n--- END ---';
-        }
-        return;
-      }
+      if (!ok) throw Exception("Failed to initialize model handles.");
+
     } catch (e) {
-      yield '❌ Neural Core Error: $e';
+      final pathLower = currentPath.toLowerCase();
+      final isLargeModel = pathLower.contains('3b') || pathLower.contains('4b') ||
+          pathLower.contains('7b') || pathLower.contains('8b') ||
+          pathLower.contains('12b') || pathLower.contains('13b') || pathLower.contains('27b') ||
+          pathLower.contains('e2b') || pathLower.contains('e4b');
+      
+      if (Platform.isIOS && isLargeModel) {
+        final fileName = currentPath.split('/').last;
+        yield '⚠️ iOS RAM Limit Reached\n\n'
+            'The model "$fileName" is too large for the memory budget '
+            'iOS allows for individual apps on this device.\n\n'
+            'Error detail: $e\n\n'
+            'Fix: Go to Settings → Manage Models → download a 1B model (like Gemma 3 1B) '
+            'which runs reliably on all iPhones.\n--- END ---';
+      } else {
+        yield '⚠️ Failed to launch local engine.\n\n'
+            'Error detail: $e\n\n'
+            'Possible causes:\n'
+            '1. iOS denied the RAM request (close other apps and retry)\n'
+            '2. Model file may be corrupted (re-download in Settings)\n'
+            '3. Device storage is full\n\n'
+            'Go to Settings → Manage Models to verify or re-download.\n--- END ---';
+      }
       return;
     }
 
@@ -174,9 +182,15 @@ class OnDeviceInferenceService extends GetxService {
       try {
         prompt = await _backend!.applyChatTemplate(_modelHandle!, messages);
       } catch (_) {
-        // v3.1: Clean fallback — no raw ChatML tokens, plain-text format only
-        prompt = 'SYSTEM:\n$hardenedSystemPrompt\n\nUSER:\n$userMessage\n\nASSISTANT:';
+        // v3.2: Hardened Gemma-style fallback template
+        if (currentPath.toLowerCase().contains('gemma')) {
+          prompt = '<start_of_turn>user\n$userMessage<end_of_turn>\n<start_of_turn>model\n';
+        } else {
+          prompt = '### System:\n$hardenedSystemPrompt\n\n### User:\n$userMessage\n\n### Assistant:\n';
+        }
       }
+
+      debugPrint('>>> ONDEVICE: Starting generation with prompt length: ${prompt.length}');
 
       final gParams = const GenerationParams(
         maxTokens: 512,
@@ -186,9 +200,7 @@ class OnDeviceInferenceService extends GetxService {
         topK: 1,
       );
 
-      final stream = _backend!.generate(_contextHandle!, prompt, gParams);
-      
-      await for (final chunk in stream) {
+      await for (final chunk in _backend!.generate(_contextHandle!, prompt, gParams)) {
         if (chunk.isNotEmpty) {
           yield utf8.decode(chunk);
         }

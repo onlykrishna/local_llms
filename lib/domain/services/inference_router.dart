@@ -196,33 +196,32 @@ If answer not in facts, say: "NO_DATA: This model is not yet updated with comple
             factBlock: factBlock,
           );
 
-          // Track meaningful output to detect silent model failure
+          // v3.2: Yield chunks immediately for better UX. Do not buffer.
           int meaningfulChunkCount = 0;
           String? lastErrorChunk;
 
-          // Buffer full response to apply whole-text post-processing
-          final responseBuffer = StringBuffer();
-          await for (final status in _onDevice.respond(finalUserPrompt, systemPromptToUse, domainName)) {
-            if (status.contains('⚠️') || status.contains('❌')) {
-              lastErrorChunk = status;
+          await for (final chunk in _onDevice.respond(finalUserPrompt, systemPromptToUse, domainName)) {
+            if (chunk.contains('⚠️') || chunk.contains('❌')) {
+              lastErrorChunk = chunk;
               break;
             }
-            responseBuffer.write(status);
-            meaningfulChunkCount++;
+            
+            // Skip status indicators for meaningful count
+            if (chunk.contains('🔄')) {
+              yield chunk;
+              continue;
+            }
+
+            // Apply lightweight sanitization per chunk
+            String sanitized = chunk.replaceAll(RegExp(r'<[^>]*>'), ''); // basic tag stripping
+            
+            if (sanitized.isNotEmpty) {
+              yield sanitized;
+              meaningfulChunkCount++;
+            }
           }
 
-          if (meaningfulChunkCount > 0) {
-            // Apply full post-processing pipeline on the complete response
-            String full = responseBuffer.toString();
-            full = hardening.sanitizeOutput(full);               // strip tokens
-            full = hardening.stripSystemLeak(full);              // strip echoed prompt
-            full = hardening.enforceFormatCompliance(full);      // fix merged words
-            full = hardening.enforceResponseStructure(full, finalUserPrompt); // rebuild structure
-            full = hardening.addVerificationFlags(full);         // tag dates
-            if (full.trim().isNotEmpty) yield full;
-          }
-
-          // If model produced no content, explain why instead of showing a blank response
+          // If model produced no content, explain why
           if (meaningfulChunkCount == 0) {
             if (lastErrorChunk != null) {
               yield lastErrorChunk;

@@ -9,7 +9,14 @@ import '../../core/models/model_registry.dart';
 import '../models/model_download_progress.dart';
 
 class ModelDownloadService extends GetxService {
-  final _dio = Dio();
+  final _dio = Dio(BaseOptions(
+    connectTimeout: const Duration(seconds: 60),
+    receiveTimeout: const Duration(seconds: 60), // detect hangs faster
+    sendTimeout: const Duration(seconds: 60),
+  ));
+  
+  static const int _maxRedirects = 15;
+  static const int _bufferSize = 1024 * 1024; // 1MB Buffer for faster I/O
   final RxMap<String, ModelDownloadProgress> _progress = <String, ModelDownloadProgress>{}.obs;
   final Map<String, CancelToken> _cancelTokens = {};
   
@@ -33,21 +40,24 @@ class ModelDownloadService extends GetxService {
     if (!modelDir.existsSync()) return;
 
     final files = await modelDir.list().toList();
-    for (var f in files) {
+    
+    // Parallelize file stats gathering for faster launch
+    await Future.wait(files.map((f) async {
       if (f is File && f.path.endsWith('.gguf')) {
         final fileName = f.path.split('/').last;
         final model = ModelRegistry.models.firstWhereOrNull((m) => m.fileName == fileName);
         if (model != null) {
+          final length = await f.length();
           _progress[model.id] = ModelDownloadProgress(
             modelId: model.id,
-            bytesReceived: await f.length(),
+            bytesReceived: length,
             totalBytes: model.sizeBytes,
             percent: 1.0,
             status: DownloadStatus.completed,
           );
         }
       }
-    }
+    }));
   }
 
   Future<void> startDownload(String modelId) async {
@@ -66,84 +76,107 @@ class ModelDownloadService extends GetxService {
     final cancelToken = CancelToken();
     _cancelTokens[modelId] = cancelToken;
 
-    try {
-      final dir = await getApplicationDocumentsDirectory();
-      final modelFilePath = '${dir.path}/models/${model.fileName}';
-      final partialFilePath = '$modelFilePath.part';
-      
-      final partialFile = File(partialFilePath);
-      int startByte = 0;
-      if (await partialFile.exists()) {
-        startByte = await partialFile.length();
-      }
+    int attempts = 0;
+    bool success = false;
+    
+    while (attempts < 3 && !success) {
+      try {
+        final dir = await getApplicationDocumentsDirectory();
+        final modelFilePath = '${dir.path}/models/${model.fileName}';
+        final partialFilePath = '$modelFilePath.part';
+        
+        final partialFile = File(partialFilePath);
+        int startByte = 0;
+        if (await partialFile.exists()) {
+          startByte = await partialFile.length();
+        }
 
-      await Directory('${dir.path}/models').create(recursive: true);
+        await Directory('${dir.path}/models').create(recursive: true);
 
-      await _dio.download(
-        model.downloadUrl,
-        partialFilePath,
-        cancelToken: cancelToken,
-        deleteOnError: false,
-        options: Options(
-          headers: startByte > 0 ? {'Range': 'bytes=$startByte-'} : null,
-          followRedirects: true,
-          sendTimeout: const Duration(seconds: 60),
-          connectTimeout: const Duration(seconds: 60),
-          receiveTimeout: const Duration(hours: 8),
-        ),
-        onReceiveProgress: (received, total) {
-          if (total == -1) return;
-          final totalDownloaded = received + startByte;
-          final fullSize = total + startByte;
-          
-          _progress[modelId] = ModelDownloadProgress(
-            modelId: modelId,
-            bytesReceived: totalDownloaded,
-            totalBytes: fullSize,
-            percent: totalDownloaded / fullSize,
-            status: DownloadStatus.downloading,
-          );
-        },
-      );
+        DateTime lastUpdate = DateTime.now();
 
-      // Verify header
-      _progress[modelId] = _progress[modelId]!.copyWith(status: DownloadStatus.verifying);
-      final validationErr = await _validateGGUFHeader(partialFilePath);
-      if (validationErr != null) {
-        throw Exception('Validation failed: $validationErr');
-      }
+        await _dio.download(
+          model.downloadUrl,
+          partialFilePath,
+          cancelToken: cancelToken,
+          deleteOnError: false,
+          options: Options(
+            headers: startByte > 0 ? {'Range': 'bytes=$startByte-'} : null,
+            followRedirects: true,
+            maxRedirects: _maxRedirects,
+            validateStatus: (status) => status != null && (status < 400 || status == 416),
+          ),
+          onReceiveProgress: (received, total) {
+            final now = DateTime.now();
+            if (now.difference(lastUpdate).inMilliseconds < 500 && received != total) {
+              return;
+            }
+            lastUpdate = now;
 
-      // Rename from .part to .gguf
-      await File(partialFilePath).rename(modelFilePath);
-      _progress[modelId] = _progress[modelId]!.copyWith(
-        status: DownloadStatus.completed,
-        percent: 1.0,
-      );
-      _activeModelId = null;
+            final totalDownloaded = received + startByte;
+            final knownTotal = (total != -1) ? total : (model.sizeBytes - startByte);
+            final fullSize = knownTotal + startByte;
 
-    } catch (e) {
-      if (e is DioException && e.type == DioExceptionType.cancel) {
-        _progress[modelId] = _progress[modelId]!.copyWith(status: DownloadStatus.paused);
-      } else {
-        String errMsg = e.toString();
-        if (e is DioException) {
-           errMsg = 'Network Error: ${e.type.name}';
-           if (e.type == DioExceptionType.connectionTimeout) errMsg = 'Connection Timeout. HF is slow.';
+            _progress[modelId] = ModelDownloadProgress(
+              modelId: modelId,
+              bytesReceived: totalDownloaded,
+              totalBytes: fullSize,
+              percent: fullSize > 0
+                  ? (totalDownloaded / fullSize).clamp(0.0, 1.0)
+                  : 0.0,
+              status: DownloadStatus.downloading,
+            );
+          },
+        );
+
+        // Verify header
+        _progress[modelId] = _progress[modelId]!.copyWith(status: DownloadStatus.verifying);
+        final validationErr = await _validateGGUFHeader(partialFilePath);
+        if (validationErr != null) {
+          throw Exception('Validation failed: $validationErr');
+        }
+
+        // Rename from .part to .gguf
+        await File(partialFilePath).rename(modelFilePath);
+        _progress[modelId] = _progress[modelId]!.copyWith(
+          status: DownloadStatus.completed,
+          percent: 1.0,
+        );
+        _activeModelId = null;
+        success = true;
+
+      } catch (e) {
+        if (e is DioException && e.type == DioExceptionType.cancel) {
+          _progress[modelId] = _progress[modelId]!.copyWith(status: DownloadStatus.paused);
+          _activeModelId = null;
+          return; // User cancelled, don't retry
         }
         
-        _progress[modelId] = _progress[modelId]!.copyWith(
-          status: DownloadStatus.failed,
-          error: errMsg,
-        );
-        Get.snackbar('Download Failed', errMsg, 
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.red.withOpacity(0.8),
-          colorText: Colors.white);
+        attempts++;
+        if (attempts >= 3) {
+          String errMsg = e.toString();
+          if (e is DioException) {
+             errMsg = 'Network Error: ${e.type.name}';
+             if (e.type == DioExceptionType.connectionTimeout) errMsg = 'Connection Timeout. HF is slow.';
+          }
+          
+          _progress[modelId] = _progress[modelId]!.copyWith(
+            status: DownloadStatus.failed,
+            error: errMsg,
+          );
+          Get.snackbar('Download Failed', errMsg, 
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: Colors.red.withOpacity(0.8),
+            colorText: Colors.white);
+          _activeModelId = null;
+          rethrow;
+        }
+        
+        // Wait before retry
+        await Future.delayed(Duration(seconds: 2 * attempts));
       }
-      _activeModelId = null;
-    } finally {
-      _cancelTokens.remove(modelId);
     }
+    _cancelTokens.remove(modelId);
   }
 
   Future<void> pauseDownload(String modelId) async {
