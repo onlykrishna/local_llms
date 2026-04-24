@@ -189,23 +189,41 @@ class _CitationChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.primary.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.colorScheme.primary.withOpacity(0.2)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.description_outlined, size: 12, color: theme.colorScheme.primary),
-          const SizedBox(width: 4),
-          Text(
-            '[${citation.index}] ${citation.fileName}',
-            style: TextStyle(fontSize: 11, color: theme.colorScheme.primary),
-          ),
-        ],
+    
+    // Truncate filename if too long
+    String displayFile = citation.fileName;
+    if (displayFile.length > 18) {
+      displayFile = '${displayFile.substring(0, 10)}...${displayFile.substring(displayFile.length - 4)}';
+    }
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 160),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.primary.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: theme.colorScheme.primary.withOpacity(0.2)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.description_outlined, size: 12, color: theme.colorScheme.primary),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                '[${citation.index}] $displayFile (p.${citation.pageNumber})',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.w500,
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

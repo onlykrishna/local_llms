@@ -63,6 +63,12 @@ class DomainService extends GetxService {
       'html', 'css', 'sql', 'database', 'compiler', 'debugger',
       'git', 'github', 'version control', 'machine learning', 'ai',
     ],
+    InferenceDomain.banking: [
+      'banking', 'finance', 'account', 'transaction', 'security', 'authentication',
+      'authentication system', 'llm', 'rag', 'ethical', 'privacy', 'challenges',
+      'gdpr', 'payment', 'credit', 'debit', 'money', 'fraud', 'biometric',
+      'pin', 'access control', 'digital banking', 'bank', 'loan', 'investment'
+    ],
     InferenceDomain.general: [] 
   };
 

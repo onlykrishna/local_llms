@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:llamadart/llamadart.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../core/services/settings_service.dart';
 
 /// Exception thrown when no model is installed but inference is requested.
@@ -63,10 +64,17 @@ class OnDeviceInferenceService extends GetxService {
     await _disposeHandles();
   }
 
+  /// Public method to pre-load the model (Warm Start)
+  Future<bool> warmup() async {
+    final currentPath = _settings.selectedModel.value;
+    if (currentPath.isEmpty) return false;
+    return await _ensureInitialized(currentPath, 'general');
+  }
+
   /// Initialize model and context for a specific GGUF file and domain.
   Future<bool> _ensureInitialized(String modelPath, String domainName) async {
+    // Only reload if the model file itself changed. Domain changes don't require handle disposal.
     if (_isInitialized && 
-        _initializedDomain == domainName && 
         _initializedModelPath == modelPath &&
         _backend != null) {
       return true;
@@ -92,10 +100,10 @@ class OnDeviceInferenceService extends GetxService {
                          modelPath.contains('e2b') || modelPath.contains('e4b') ||
                          modelPath.contains('phi-4-mini') || modelPath.contains('qwen2.5-3b');
 
-      // v3.2: Use 4 threads for iOS performance and allow auto backend (Metal)
+      // v3.3: Increased context size to 4096 for RAG support on 1B models, 2048 for 3B+
       final mParams = ModelParams(
-        contextSize: isVeryLarge ? 512 : 1024, 
-        gpuLayers: Platform.isIOS ? 99 : 0, // Enable Metal on iOS
+        contextSize: isVeryLarge ? 2048 : 4096, 
+        gpuLayers: Platform.isIOS ? 99 : 0, 
         numberOfThreads: 4, 
         batchSize: 512, 
         preferredBackend: GpuBackend.auto,
@@ -182,9 +190,14 @@ class OnDeviceInferenceService extends GetxService {
       try {
         prompt = await _backend!.applyChatTemplate(_modelHandle!, messages);
       } catch (_) {
-        // v3.2: Hardened Gemma-style fallback template
-        if (currentPath.toLowerCase().contains('gemma')) {
+        // Fallbacks
+        final pathLower = currentPath.toLowerCase();
+        if (pathLower.contains('qwen')) {
+          prompt = '<|im_start|>system\n$hardenedSystemPrompt<|im_end|>\n<|im_start|>user\n$userMessage<|im_end|>\n<|im_start|>assistant\n';
+        } else if (pathLower.contains('gemma')) {
           prompt = '<start_of_turn>user\n$userMessage<end_of_turn>\n<start_of_turn>model\n';
+        } else if (pathLower.contains('llama-3') || pathLower.contains('llama3')) {
+          prompt = '<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n$hardenedSystemPrompt<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n$userMessage<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n';
         } else {
           prompt = '### System:\n$hardenedSystemPrompt\n\n### User:\n$userMessage\n\n### Assistant:\n';
         }
@@ -193,11 +206,11 @@ class OnDeviceInferenceService extends GetxService {
       debugPrint('>>> ONDEVICE: Starting generation with prompt length: ${prompt.length}');
 
       final gParams = const GenerationParams(
-        maxTokens: 512,
-        temp: 0.0, // Force greedy search for 1B/3B factual reliability
-        topP: 0.0,
+        maxTokens: 256,
+        temp: 0.1, // Slight temp for less looping but still factual
+        topP: 0.9,
         penalty: 1.1,
-        topK: 1,
+        topK: 40,
       );
 
       await for (final chunk in _backend!.generate(_contextHandle!, prompt, gParams)) {
@@ -235,7 +248,23 @@ class OnDeviceInferenceService extends GetxService {
     _backend?.cancelGeneration();
   }
 
+  Future<void> clearModelCache() async {
+    try {
+      _disposeHandles();
+      final dir = await getApplicationDocumentsDirectory();
+      final modelDir = Directory('${dir.path}/models');
+      if (await modelDir.exists()) {
+        await modelDir.delete(recursive: true);
+        await modelDir.create();
+      }
+    } catch (e) {
+      debugPrint('Error clearing model cache: $e');
+    }
+  }
+
   void notifyDomainSwitch() {
-    _disposeHandles(); 
+    // No longer disposing handles on domain switch to keep model warm.
+    // _disposeHandles(); 
+    _initializedDomain = null; 
   }
 }

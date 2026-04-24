@@ -167,6 +167,7 @@ class BackendStatusBar extends StatelessWidget {
       case InferenceDomain.health:     return const Color(0xFFE53935);
       case InferenceDomain.bollywood:  return const Color(0xFFF9A825);
       case InferenceDomain.education:  return const Color(0xFF1565C0);
+      case InferenceDomain.banking:    return const Color(0xFF43A047);
       case InferenceDomain.general:    return const Color(0xFF00695C);
     }
   }
@@ -176,6 +177,7 @@ class BackendStatusBar extends StatelessWidget {
       case InferenceDomain.health:     return Icons.favorite_rounded;
       case InferenceDomain.bollywood:  return Icons.movie_creation_rounded;
       case InferenceDomain.education:  return Icons.school_rounded;
+      case InferenceDomain.banking:    return Icons.account_balance_rounded;
       case InferenceDomain.general:    return Icons.chat_bubble_rounded;
     }
   }

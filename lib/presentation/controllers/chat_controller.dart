@@ -9,6 +9,7 @@ import '../../domain/services/domain_service.dart';
 import '../../domain/services/expert_knowledge_base.dart';
 import '../../core/services/settings_service.dart';
 import '../../domain/models/inference_domain.dart';
+import '../../domain/source_citation_service.dart';
 
 enum MessageState { idle, thinking, streaming, cancelled, done, error }
 
@@ -17,6 +18,7 @@ class ChatController extends GetxController {
   final InferenceRouterService _router = Get.find<InferenceRouterService>();
   final DomainService _domainService = Get.find<DomainService>();
   final SettingsService _settings = Get.find<SettingsService>();
+  final SourceCitationService _citationService = Get.find<SourceCitationService>();
   final _uuid = const Uuid();
 
   // --- Reactive State -------------------------------------------------------
@@ -139,13 +141,22 @@ class ChatController extends GetxController {
         isGenerating.value = false;
         
         String finalText = _responseBuffer.toString();
-        // v3.1: Semantic relevance check removed — caused false positives on valid responses
+        
+        // v3.2: Programmatic Citations (Hardened)
+        if (_router.lastRetrievedChunks != null && _router.lastRetrievedChunks!.isNotEmpty) {
+          final citations = _citationService.buildCitations(_router.lastRetrievedChunks!);
+          if (citations.isNotEmpty) {
+             final citationText = citations.map((c) => '[${c.index}] ${c.fileName}, p.${c.pageNumber}').join('\n');
+             finalText = '$finalText\n\n$citationText';
+          }
+        }
 
         final aiMsg = ChatMessage(id: placeholderId, content: finalText, isUser: false);
         messages.insert(0, aiMsg);
         await _repository.saveMessage(aiMsg);
         currentResponseText.value = '';
         _currentPlaceholderId = null;
+        _router.lastRetrievedChunks = null; // Clear for next turn
       },
       onError: (e, _) {
         currentMessageState.value = MessageState.error;

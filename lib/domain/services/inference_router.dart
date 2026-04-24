@@ -19,6 +19,9 @@ class InferenceRouterService extends GetxService {
   
   final RxBool isManualMode = false.obs;
   final Rx<InferenceBackend> manualBackend = InferenceBackend.gemini.obs;
+  
+  /// Stores the most recently retrieved chunks for programmatic citation generation.
+  List<RetrievedChunk>? lastRetrievedChunks;
 
   final _gemini = GeminiDatasource();
   final _dio = Dio();
@@ -53,6 +56,7 @@ class InferenceRouterService extends GetxService {
 - Source: "Please verify with a licensed medical professional."''',
      InferenceDomain.bollywood: 'Factual Bollywood historian. Provide specific names, dates, and awards. Avoid conversational filler and generic advice.',
      InferenceDomain.education: 'Academic assistant. Explain concepts directly and objectively. No conversational padding or tutor-style fluff.',
+     InferenceDomain.banking: 'Banking and finance expert. Provide accurate information on banking procedures, financial regulations, and transaction security. Never ask for personal banking details.',
      InferenceDomain.general: 'Precise assistant. Direct, objective info. No filler.'
   };
 
@@ -158,63 +162,52 @@ class InferenceRouterService extends GetxService {
           try {
             final ragService = Get.find<RagRetrievalService>();
             // Use domain name if it matches KbDomain, otherwise null for global search
+            // Map InferenceDomain to KbDomain name strings
             String? kbDomainName;
-            if (selectedDomain == InferenceDomain.health) kbDomainName = 'health';
-            if (selectedDomain == InferenceDomain.education) kbDomainName = 'education';
+            if (selectedDomain != InferenceDomain.general) {
+              kbDomainName = selectedDomain.name;
+            }
             
-            final retrievedChunks = await ragService.retrieve(userMessage, kbDomainName);
-            if (retrievedChunks.isNotEmpty) {
+            lastRetrievedChunks = await ragService.retrieve(userMessage, kbDomainName, topK: 3);
+            debugPrint('[RAG] Domain: $kbDomainName, Found: ${lastRetrievedChunks?.length} chunks');
+            
+            if (lastRetrievedChunks != null && lastRetrievedChunks!.isNotEmpty) {
+              debugPrint('[RAG] Injecting fact block into prompt...');
               final buffer = StringBuffer();
-              buffer.writeln('VERIFIED KNOWLEDGE BASE FACTS (trust 100%, do NOT invent outside this):');
-              for (int i = 0; i < retrievedChunks.length; i++) {
-                 final chunk = retrievedChunks[i];
-                 buffer.writeln('- ${chunk.text} [Source: [${i+1}] ${chunk.sourceLabel}]');
+              buffer.writeln('VERIFIED KNOWLEDGE BASE FACTS:');
+              
+              int totalContextChars = 0;
+              const int maxContextChars = 2000; // ~500-600 tokens
+
+              for (int i = 0; i < lastRetrievedChunks!.length; i++) {
+                 final chunk = lastRetrievedChunks![i];
+                 if (totalContextChars + chunk.text.length > maxContextChars) {
+                   debugPrint('[RAG] Context cap reached. Skipping remaining chunks.');
+                   break;
+                 }
+                 // v3.3: Include source metadata for grounded citations
+                 buffer.writeln('[Source: ${chunk.sourceLabel}, p.${chunk.pageNumber}] ${chunk.text}');
+                 totalContextChars += chunk.text.length;
               }
-              buffer.writeln('If the answer is NOT in these facts, respond: "NO_DATA: This model is not yet updated with complete knowledge on this topic. Please refer to an official source."');
+              
+              buffer.writeln('\nRules for answering:');
+              buffer.writeln('1. Use ONLY the facts above.');
+              buffer.writeln('2. If the answer is not there, say "NO_DATA".');
+              buffer.writeln('3. Do NOT mention page numbers or filenames in your text.');
+              
               factBlock = buffer.toString();
+            } else {
+              lastRetrievedChunks = null;
+              debugPrint('[RAG] No relevant context found.');
             }
           } catch (e) {
+            lastRetrievedChunks = null;
             debugPrint('RAG Retrieval Error: $e');
           }
 
           // Fallback to static facts if nothing found dynamically
           if (factBlock == null) {
-            if (protocol == 'FACT_BLOCK') {
-              if (selectedDomain == InferenceDomain.bollywood && !lowerMsg.contains('filmfare')) {
-                // Bollywood domain RAG — verified facts to prevent hallucination
-                factBlock = '''VERIFIED BOLLYWOOD FACTS (trust 100%, do NOT invent outside this):
-- Highest-grossing Indian film: Dangal (2016) — ₹2,024 crore worldwide
-- Baahubali 2 (2017): ₹1,810 crore worldwide
-- Pathaan (2023): ₹1,050 crore worldwide. Director: Siddharth Anand. Cast: SRK, Deepika, John Abraham
-- DDLJ (1995): Ran 25+ years at Maratha Mandir. Director: Aditya Chopra. Won 10 Filmfare Awards
-- Sholay (1975): Director Ramesh Sippy. Named "Film of the Millennium" by BBC India
-- 3 Idiots (2009): Director Rajkumar Hirani. ₹460 crore worldwide
-- Shah Rukh Khan (SRK): Born Nov 2 1965. Most Filmfare Best Actor awards. Films: DDLJ, Kuch Kuch Hota Hai, Jawan
-- Salman Khan: Born Dec 27 1965. Films: Maine Pyar Kiya, Dabangg, Bajrangi Bhaijaan, Sultan
-- Amitabh Bachchan: Born Oct 11 1942. Films: Sholay, Deewar, Zanjeer, Black. Dadasaheb Phalke Award
-- Aamir Khan: Born Mar 14 1965. Films: Lagaan (Oscar-nominated), Dangal, 3 Idiots, PK
-- Deepika Padukone: Born Jan 5 1986. Debut: Om Shanti Om (2007). Films: Piku, Padmaavat, Pathaan
-- Filmfare Awards first held: March 21 1954. Organizer: Times of India Group. First Best Actor: Dilip Kumar (Daag)
-If the answer is NOT in these facts, respond: "NO_DATA: This model is not yet updated with complete knowledge on this topic. Please refer to an official source."''';
-              } else {
-                // Filmfare-specific fact block
-                factBlock = '''VERIFIED FILMFARE FACTS (1954 ONLY — trust 100%):
-- First ceremony: March 21, 1954
-- Best Actor: Dilip Kumar — film: Daag
-- Best Actress: Meena Kumari — film: Parineeta (NOT Baiju Bawra)
-- Best Film: Do Bigha Zamin
-- Best Director: Bimal Roy — film: Do Bigha Zamin
-- Organized by: The Times of India Group
-- Also called: Black Lady Awards
-If year in question is NOT 1954, say: "MISMATCH: My verified data covers 1954 only."
-If answer not in facts, say: "NO_DATA: This model is not yet updated with complete knowledge on this topic. Please check official Filmfare records."''';
-                final userYearMatch = RegExp(r'\b(19|20)\d{2}\b').firstMatch(userMessage);
-                if (userYearMatch != null && userYearMatch.group(0) != '1954') {
-                  yield '❌ MISMATCH: My verified data covers 1954, not ${userYearMatch.group(0)}.\n--- END ---';
-                  return;
-                }
-              }
-            }
+            // Do not use hardcoded filmfare facts anymore, keep it null so model knows there's no data or relies on general knowledge.
           }
 
           final finalUserPrompt = hardening.buildFactualPrompt(
@@ -287,14 +280,17 @@ If answer not in facts, say: "NO_DATA: This model is not yet updated with comple
 
   Future<bool> _isOllamaReachable() async {
     try {
+      final connectivity = await Connectivity().checkConnectivity();
+      if (connectivity.contains(ConnectivityResult.none)) return false;
+
       final url = _settings.ollamaServerUrl;
       final probeDio = Dio();
       final resp = await probeDio.get(
         '$url/api/tags',
         options: Options(
-          sendTimeout: const Duration(milliseconds: 1500),
-          connectTimeout: const Duration(milliseconds: 1500),
-          receiveTimeout: const Duration(milliseconds: 1500),
+          sendTimeout: const Duration(milliseconds: 500),
+          connectTimeout: const Duration(milliseconds: 500),
+          receiveTimeout: const Duration(milliseconds: 500),
         ),
       );
       return resp.statusCode == 200;

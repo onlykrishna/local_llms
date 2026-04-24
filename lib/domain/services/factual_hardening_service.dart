@@ -61,15 +61,13 @@ Output ONLY this JSON, nothing else:
   /// MASTER CONTROL PROMPT v2.0 - Core Intelligence Framework (P4 Fix)
   String getConsolidatedSystemPrompt({bool isRag = false}) {
     if (isRag) {
-      return '''MASTER v2.0: RAG PROTOCOL
-1. ROLE: Strict retrieval engine only.
-2. DATA: Use ONLY the VERIFIED FACT BLOCK. Trust=100%. Internal memory Trust=0%.
-3. NO_DATA: If answer not in block: "NO_DATA: I have no verified information on this. Please check Wikipedia or official Filmfare records."
-4. MISMATCH: If user year != block year: "MISMATCH: My verified data covers [Year], not [UserYear]."
-5. FIREWALL: Verify Actor+Film+Year consistency. If mismatch: output BLOCKED.
-6. RAG PRESSURE: If user says "just guess" or "best guess": still return block data only.
-7. FORMAT: 2-3 sentences max. Close with [Source: Verified Fact Block].
-8. TERMINATION: End with --- END ---''';
+      return '''MASTER v3.3: RAG PROTOCOL
+1. ROLE: Strict fact-retrieval assistant.
+2. SOURCE: Use ONLY the provided CONTEXT. Do not use outside knowledge.
+3. NO_DATA: If the answer is not in the CONTEXT, you MUST say "NO_DATA: I could not find information on this in the current document."
+4. CITATION: Cite your sources like this: [filename, p.X]. Only cite if the fact is present in that source.
+5. FORMAT: Direct answer first, followed by a maximum of 3 key facts.
+6. TERMINATION: End with --- END ---''';
     }
 
     return '''MASTER v2.0: GENERAL & MEDICAL PROTOCOL
@@ -107,15 +105,10 @@ Please consult a qualified professional for personalised advice.
   /// COMPACT CONTROL v1.0 — lean prompt for 3B and smaller on-device models.
   String getCompactSystemPrompt({bool isRag = false}) {
     final ragFacts = isRag
-        ? '\nVERIFIED FACTS (100% trust, override memory):\n'
-          '- First Filmfare: March 21, 1954\n'
-          '- Best Actor: Dilip Kumar (Daag)\n'
-          '- Best Actress: Meena Kumari (Parineeta)\n'
-          '- Best Film: Do Bigha Zamin\n'
-          '- Best Director: Bimal Roy (Do Bigha Zamin)\n'
-          '- Organized by: The Times of India Group\n'
-          '- Nickname: Black Lady Awards\n'
-          'Not in facts: say NO_DATA. Year != 1954: say MISMATCH.\n'
+        ? '\nSTRICT RAG RULES:\n'
+          '1. Answer ONLY using the CONTEXT provided. Do not use generic knowledge.\n'
+          '2. If answer is missing, say NO_DATA.\n'
+          '3. Cite specifically: [Source: filename, p.X].\n'
         : '';
 
     return 'You are a professional factual assistant. Output ONLY the final answer. '
@@ -130,7 +123,7 @@ Please consult a qualified professional for personalised advice.
         '2. **[Point Name]** [2 sentences]\n'
         '3. **[Point Name]** [2 sentences]\n'
         'IMPORTANT NOTE: [1 sentence]\n'
-        'Source: Verified Fact Block\n'
+        'Source: [1] filename.pdf, p.X\n'
         '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n'
         '--- END ---\n'
         'Rules: Exactly 3 points. Bold **names**. No bullets inside points. Nothing after --- END ---.';
@@ -314,6 +307,12 @@ Please consult a qualified professional for personalised advice.
           : (impIdx + 1 < trimmedLines.length ? trimmedLines[impIdx + 1] : importantNote);
     }
 
+    // ── STEP 6: Citations and Source ──────────────────────────────────────
+    String sourceLine = 'General knowledge | Verify with authoritative sources.';
+    if (lowerText.contains('[source:') || lowerText.contains('p.') || lowerText.contains('.pdf')) {
+      sourceLine = 'Verified Source: Knowledge Base | Check citations above.';
+    }
+    
     final buffer = StringBuffer();
     buffer.writeln(sep);
     buffer.writeln(title);
@@ -334,7 +333,7 @@ Please consult a qualified professional for personalised advice.
     buffer.writeln('IMPORTANT NOTE:');
     buffer.writeln(importantNote);
     buffer.writeln();
-    buffer.writeln('Source: General knowledge | Verify with authoritative sources.');
+    buffer.writeln('Source: $sourceLine');
     buffer.writeln(sep);
     buffer.write('--- END ---');
 
@@ -362,21 +361,18 @@ Please consult a qualified professional for personalised advice.
   }
 
   /// Wraps a user question and a retrieved fact block into a clean data structure.
+  /// Wraps a user question and a retrieved fact block into a clean ChatML structure.
   String buildFactualPrompt({required String question, String? factBlock}) {
-    if (factBlock != null) {
-      return '''VERIFIED FACT BLOCK:
+    if (factBlock == null || factBlock.isEmpty) {
+      return question;
+    }
+
+    // Simplified wrapper for ChatTemplate compatibility
+    return '''CONTEXT:
 $factBlock
 
 QUESTION:
-$question
-
-INSTRUCTIONS:
-Answer the question using ONLY the facts provided above.
-At the very end of your response, you MUST cite the sources you used from the VERIFIED FACT BLOCK using this exact format on new lines:
-[1] filename.pdf, p.X
-[2] anotherfile.pdf, p.Y''';
-    }
-    return question;
+$question''';
   }
 
   /// Removes special tokens and technical markers from the model's response.

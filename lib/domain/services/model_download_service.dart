@@ -133,6 +133,10 @@ class ModelDownloadService extends GetxService {
         _progress[modelId] = _progress[modelId]!.copyWith(status: DownloadStatus.verifying);
         final validationErr = await _validateGGUFHeader(partialFilePath);
         if (validationErr != null) {
+          // If validation fails, delete the partial file so we don't keep retrying on corruption
+          if (await File(partialFilePath).exists()) {
+            await File(partialFilePath).delete();
+          }
           throw Exception('Validation failed: $validationErr');
         }
 

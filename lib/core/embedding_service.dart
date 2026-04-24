@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:onnxruntime/onnxruntime.dart';
 import 'package:path_provider/path_provider.dart';
@@ -29,6 +30,13 @@ class EmbeddingService {
       if (lines[i] == '[PAD]') _padTokenId = i;
     }
 
+    // Verify critical tokens exist
+    assert(_vocab.containsKey('[CLS]'), 'vocab.txt missing [CLS] token');
+    assert(_vocab.containsKey('[SEP]'), 'vocab.txt missing [SEP] token');
+    assert(_vocab.containsKey('[UNK]'), 'vocab.txt missing [UNK] token');
+    debugPrint('[Tokenizer] Loaded ${_vocab.length} tokens. '
+      'CLS=$_clsTokenId, SEP=$_sepTokenId, UNK=$_unkTokenId');
+
     // Load ONNX model
     final rawAssetFile = await rootBundle.load('assets/models/all-minilm-l6-v2.onnx');
     final bytes = rawAssetFile.buffer.asUint8List();
@@ -44,17 +52,22 @@ class EmbeddingService {
   }
 
   List<int> _tokenize(String text) {
-    text = text.toLowerCase().replaceAll(RegExp(r'[^\w\s]'), ' ');
+    // Preserve punctuation and hyphens as they carry semantic meaning for BERT/MiniLM
+    text = text.toLowerCase().replaceAllMapped(RegExp(r'([.,!?()-])'), (m) => ' ${m.group(1)} ');
     final words = text.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
-    
-    List<int> tokens = [_clsTokenId];
+
+    final tokenIds = <int>[_clsTokenId];
     
     for (var word in words) {
-      if (tokens.length >= _maxLen - 1) break;
+      if (_vocab.containsKey(word)) {
+        tokenIds.add(_vocab[word]!);
+        continue;
+      }
       
-      int start = 0;
+      // WordPiece subtokenization
       bool isBad = false;
-      List<int> subTokens = [];
+      int start = 0;
+      final subTokens = <int>[];
       
       while (start < word.length) {
         int end = word.length;
@@ -78,60 +91,59 @@ class EmbeddingService {
       }
       
       if (isBad) {
-        subTokens = [_unkTokenId];
-      }
-      
-      for (var t in subTokens) {
-        if (tokens.length < _maxLen - 1) tokens.add(t);
+        tokenIds.add(_unkTokenId);
+      } else {
+        tokenIds.addAll(subTokens);
       }
     }
     
-    tokens.add(_sepTokenId);
-    return tokens;
+    tokenIds.add(_sepTokenId);
+    
+    // Limit to max length
+    if (tokenIds.length > _maxLen) {
+      return tokenIds.sublist(0, _maxLen);
+    }
+    
+    return tokenIds;
   }
 
   Future<List<double>> embed(String text) async {
-    if (_session == null) throw Exception("EmbeddingService not initialized");
-    
+    if (_session == null) await init();
+
     final tokenIds = _tokenize(text);
     final seqLen = tokenIds.length;
     
-    final inputIds = Int64List(seqLen);
-    final attentionMask = Int64List(seqLen);
-    final tokenTypeIds = Int64List(seqLen);
-    
-    for (int i = 0; i < seqLen; i++) {
-      inputIds[i] = tokenIds[i];
-      attentionMask[i] = 1;
-      tokenTypeIds[i] = 0;
+    if (text.length < 50) {
+      debugPrint('[Embed] Text: "${text.substring(0, text.length > 30 ? 30 : text.length)}..."');
+      debugPrint('[Embed] Tokens: ${tokenIds.take(15).toList()}');
     }
-    
-    final inputIdsTensor = OrtValueTensor.createTensorWithDataList(inputIds, [1, seqLen]);
-    final attentionMaskTensor = OrtValueTensor.createTensorWithDataList(attentionMask, [1, seqLen]);
-    final tokenTypeIdsTensor = OrtValueTensor.createTensorWithDataList(tokenTypeIds, [1, seqLen]);
+
+    final inputIds = OrtValueTensor.createTensorWithDataList(Int64List.fromList(tokenIds), [1, seqLen]);
+    final attentionMask = OrtValueTensor.createTensorWithDataList(Int64List.fromList(List.filled(seqLen, 1)), [1, seqLen]);
+    final tokenTypeIds = OrtValueTensor.createTensorWithDataList(Int64List.fromList(List.filled(seqLen, 0)), [1, seqLen]);
     
     final inputs = {
-      'input_ids': inputIdsTensor,
-      'attention_mask': attentionMaskTensor,
-      'token_type_ids': tokenTypeIdsTensor,
+      'input_ids': inputIds,
+      'attention_mask': attentionMask,
+      'token_type_ids': tokenTypeIds,
     };
-    
+
     final runOptions = OrtRunOptions();
     final outputs = _session!.run(runOptions, inputs);
     
-    // Outputs[0] is usually a list/Float32List of size 1 * seqLen * 384
     final outputValue = outputs[0]?.value;
+    if (outputValue == null) {
+      throw Exception('Model output is null');
+    }
+
     List<double> flattened;
-    if (outputValue is List) {
-      // Sometimes it's a nested list depending on the wrapper version, we flatten it
-      flattened = outputValue.expand((e) {
-        if (e is List) {
-          return e.expand((e2) => e2 is List ? e2.cast<double>() : [e2 as double]);
-        }
-        return [e as double];
-      }).toList();
+    if (outputValue is List<List<List<double>>>) {
+      // Handle 3D output [1, seqLen, 384]
+      flattened = outputValue[0].expand((e) => e).toList();
+    } else if (outputValue is Float32List) {
+      flattened = outputValue.toList();
     } else {
-      flattened = (outputValue as Float32List).toList();
+      throw Exception('Unexpected model output type: ${outputValue.runtimeType}');
     }
 
     // Mean pooling
@@ -154,9 +166,10 @@ class EmbeddingService {
       }
     }
     
-    inputIdsTensor.release();
-    attentionMaskTensor.release();
-    tokenTypeIdsTensor.release();
+    // Cleanup
+    inputIds.release();
+    attentionMask.release();
+    tokenTypeIds.release();
     runOptions.release();
     for (var out in outputs) {
       out?.release();

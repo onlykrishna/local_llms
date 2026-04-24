@@ -4,6 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../core/services/settings_service.dart';
 import '../bindings/model_manager_binding.dart';
+import 'package:path_provider/path_provider.dart';
+import '../../domain/services/on_device_inference_service.dart';
+import '../../data/source_document.dart';
+import '../../data/document_chunk.dart';
+import '../../objectbox.g.dart';
 import 'model_manager_page.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -126,6 +131,90 @@ class _SettingsPageState extends State<SettingsPage> {
               value: s.contextWindow.value.toDouble(),
               onChanged: (v) => s.updateContextWindow(v.toInt()),
             )),
+
+            const SizedBox(height: 40),
+            const _SectionHeader(title: 'MAINTENANCE'),
+            const SizedBox(height: 20),
+
+            _buildActionTile(
+              theme: theme,
+              title: 'Clear Model Cache',
+              subtitle: 'Delete all downloaded models',
+              icon: Icons.delete_sweep_rounded,
+              onTap: () => _confirmClearCache(context, 'Models', () async {
+                await Get.find<OnDeviceInferenceService>().clearModelCache();
+                Get.snackbar('Success', 'Model cache cleared');
+              }),
+            ),
+            const SizedBox(height: 16),
+            _buildActionTile(
+              theme: theme,
+              title: 'Clear Knowledge Base',
+              subtitle: 'Reset all ingested documents',
+              icon: Icons.auto_delete_rounded,
+              onTap: () => _confirmClearCache(context, 'Knowledge Base', () async {
+                final store = Get.find<Store>();
+                store.box<SourceDocument>().removeAll();
+                store.box<DocumentChunk>().removeAll();
+                Get.snackbar('Success', 'Knowledge base cleared');
+              }),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmClearCache(BuildContext context, String target, VoidCallback onConfirm) {
+    Get.dialog(
+      AlertDialog(
+        title: Text('Clear $target?'),
+        content: Text('This action cannot be undone. Are you sure?'),
+        actions: [
+          TextButton(onPressed: () => Get.back(), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () {
+              Get.back();
+              onConfirm();
+            }, 
+            child: const Text('Clear', style: TextStyle(color: Colors.redAccent))
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionTile({
+    required ThemeData theme,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainer,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: theme.colorScheme.outline.withOpacity(0.5)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: Colors.redAccent, size: 20),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold)),
+                  Text(subtitle, style: TextStyle(color: theme.colorScheme.onSurfaceVariant.withOpacity(0.6), fontSize: 11)),
+                ],
+              ),
+            ),
+            const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 16),
           ],
         ),
       ),

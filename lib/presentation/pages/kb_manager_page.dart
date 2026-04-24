@@ -43,10 +43,20 @@ class KbManagerController extends GetxController {
   }
 
   Future<void> pickAndIngestPdf() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['pdf'],
-    );
+    if (isIngesting.value) return; // Guard against multiple clicks
+    
+    FilePickerResult? result;
+    try {
+      result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+    } catch (e) {
+      if (e.toString().contains('already_active')) {
+         Get.snackbar('Picker Busy', 'Please wait for the current picker to close');
+      }
+      return;
+    }
 
     if (result != null && result.files.single.path != null) {
       File file = File(result.files.single.path!);
