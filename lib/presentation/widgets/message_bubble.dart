@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:intl/intl.dart';
 import '../../domain/entities/chat_message.dart';
+import '../../domain/source_citation_service.dart';
+import 'package:get/get.dart';
 
 class MessageBubble extends StatelessWidget {
   final ChatMessage message;
@@ -73,6 +75,7 @@ class MessageBubble extends StatelessWidget {
                                 ),
                               ),
                             ),
+                            if (!isMe) ..._buildCitations(theme),
                             const SizedBox(height: 6),
                             Text(
                               DateFormat('hh:mm').format(message.timestamp),
@@ -144,6 +147,65 @@ class MessageBubble extends StatelessWidget {
         content: Text('Message copied to neural buffer'),
         behavior: SnackBarBehavior.floating,
         duration: Duration(seconds: 1),
+      ),
+    );
+  }
+
+  List<Widget> _buildCitations(ThemeData theme) {
+    final citationService = Get.isRegistered<SourceCitationService>() 
+        ? Get.find<SourceCitationService>() 
+        : SourceCitationService(); // fallback if not injected
+    
+    final citations = citationService.parseCitations(message.content);
+    if (citations.isEmpty) return [];
+
+    return [
+      const SizedBox(height: 12),
+      const Divider(height: 1, color: Colors.black12),
+      const SizedBox(height: 8),
+      Text(
+        'SOURCES',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1.2,
+          color: theme.colorScheme.primary,
+        ),
+      ),
+      const SizedBox(height: 6),
+      Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: citations.map((c) => _CitationChip(citation: c)).toList(),
+      ),
+    ];
+  }
+}
+
+class _CitationChip extends StatelessWidget {
+  final Citation citation;
+  const _CitationChip({required this.citation});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.colorScheme.primary.withOpacity(0.2)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.description_outlined, size: 12, color: theme.colorScheme.primary),
+          const SizedBox(width: 4),
+          Text(
+            '[${citation.index}] ${citation.fileName}',
+            style: TextStyle(fontSize: 11, color: theme.colorScheme.primary),
+          ),
+        ],
       ),
     );
   }

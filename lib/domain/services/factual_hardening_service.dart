@@ -368,7 +368,13 @@ Please consult a qualified professional for personalised advice.
 $factBlock
 
 QUESTION:
-$question''';
+$question
+
+INSTRUCTIONS:
+Answer the question using ONLY the facts provided above.
+At the very end of your response, you MUST cite the sources you used from the VERIFIED FACT BLOCK using this exact format on new lines:
+[1] filename.pdf, p.X
+[2] anotherfile.pdf, p.Y''';
     }
     return question;
   }

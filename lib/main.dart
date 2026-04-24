@@ -22,6 +22,13 @@ import 'presentation/widgets/app_drawer.dart';
 import 'domain/entities/download_state.dart';
 import 'domain/services/model_download_service.dart';
 import 'presentation/controllers/model_manager_controller.dart';
+import 'core/embedding_service.dart';
+import 'domain/document_ingestion_service.dart';
+import 'domain/rag_retrieval_service.dart';
+import 'domain/source_citation_service.dart';
+import 'objectbox.g.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -60,6 +67,20 @@ Future<void> _initServices() async {
       Get.putAsync(() => FallbackDatasetService().init()).timeout(const Duration(seconds: 15)),
       Get.putAsync(() => DomainService().init()).timeout(const Duration(seconds: 15)),
     ]);
+
+    // Init ObjectBox
+    final docsDir = await getApplicationDocumentsDirectory();
+    final store = await openStore(directory: p.join(docsDir.path, "obx-rag"));
+    Get.put(store);
+
+    // Init RAG Services
+    final embeddingService = EmbeddingService();
+    await embeddingService.init();
+    Get.put(embeddingService);
+    
+    Get.put(DocumentIngestionService(store, embeddingService));
+    Get.put(RagRetrievalService(store, embeddingService));
+    Get.put(SourceCitationService());
 
     // These depend on the ones above
     Get.put(FactualHardeningService());

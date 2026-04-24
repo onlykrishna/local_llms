@@ -8,6 +8,7 @@ import '../controllers/chat_controller.dart';
 import '../pages/history_page.dart';
 import '../pages/settings_page.dart';
 import '../pages/model_manager_page.dart';
+import '../pages/kb_manager_page.dart';
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
@@ -52,6 +53,16 @@ class AppDrawer extends StatelessWidget {
                   onTap: () {
                     Get.back();
                     Get.to(() => const HistoryPage());
+                  },
+                ),
+                _DrawerItem(
+                  icon: Icons.library_books_rounded,
+                  label: 'Knowledge Base',
+                  subtitle: 'Manage domain PDFs',
+                  color: theme.colorScheme.tertiary,
+                  onTap: () {
+                    Get.back();
+                    Get.to(() => const KbManagerPage());
                   },
                 ),
                 _DrawerItem(

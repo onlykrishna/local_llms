@@ -40,6 +40,13 @@ dependencies:
   uuid: ^4.2.2
   intl: ^0.19.0
   json_annotation: ^4.9.0
+  
+  # RAG / Vector DB
+  objectbox: ^4.0.0
+  objectbox_flutter_libs: ^4.0.0
+  onnxruntime: ^1.4.0
+  syncfusion_flutter_pdf: ^25.1.41
+  flutter_svg: ^2.0.10
 
 dev_dependencies:
   flutter_test:
@@ -47,9 +54,17 @@ dev_dependencies:
   hive_generator: ^2.0.1
   build_runner: ^2.4.6
   json_serializable: ^6.8.0
+  objectbox_generator: ^4.0.0
 
 flutter:
   uses-material-design: true
   assets:
     - assets/fallback_dataset.json
     - assets/local_brain.json
+    - assets/models/all-minilm-l6-v2.onnx
+    - assets/models/vocab.txt
+    - assets/icons/health.svg
+    - assets/icons/education.svg
+    - assets/icons/banking.svg
+    - assets/icons/legal.svg
+    - assets/icons/govt.svg

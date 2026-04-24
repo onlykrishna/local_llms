@@ -9,6 +9,7 @@ import '../services/domain_service.dart';
 import '../services/on_device_inference_service.dart';
 import '../services/factual_hardening_service.dart';
 import '../models/inference_domain.dart';
+import '../rag_retrieval_service.dart';
 
 enum InferenceBackend { ollama, gemini, onDevice }
 
@@ -148,15 +149,40 @@ class InferenceRouterService extends GetxService {
           // Protocol assigned silently — not yielded to UI
 
           // v3.1: Use compact prompt for on-device 3B models to prevent context overflow
-          final bool isRag = protocol == 'FACT_BLOCK';
+          final bool isRag = true; // Always attempt RAG for knowledge base
           final systemPromptToUse = hardening.getCompactSystemPrompt(isRag: isRag);
 
-          // P2 Fix: Full 10-field expanded Filmfare fact block
           String? factBlock;
-          if (isRag) {
-            if (selectedDomain == InferenceDomain.bollywood && !lowerMsg.contains('filmfare')) {
-              // Bollywood domain RAG — verified facts to prevent hallucination
-              factBlock = '''VERIFIED BOLLYWOOD FACTS (trust 100%, do NOT invent outside this):
+          
+          // First, try to retrieve dynamic facts from ObjectBox
+          try {
+            final ragService = Get.find<RagRetrievalService>();
+            // Use domain name if it matches KbDomain, otherwise null for global search
+            String? kbDomainName;
+            if (selectedDomain == InferenceDomain.health) kbDomainName = 'health';
+            if (selectedDomain == InferenceDomain.education) kbDomainName = 'education';
+            
+            final retrievedChunks = await ragService.retrieve(userMessage, kbDomainName);
+            if (retrievedChunks.isNotEmpty) {
+              final buffer = StringBuffer();
+              buffer.writeln('VERIFIED KNOWLEDGE BASE FACTS (trust 100%, do NOT invent outside this):');
+              for (int i = 0; i < retrievedChunks.length; i++) {
+                 final chunk = retrievedChunks[i];
+                 buffer.writeln('- ${chunk.text} [Source: [${i+1}] ${chunk.sourceLabel}]');
+              }
+              buffer.writeln('If the answer is NOT in these facts, respond: "NO_DATA: This model is not yet updated with complete knowledge on this topic. Please refer to an official source."');
+              factBlock = buffer.toString();
+            }
+          } catch (e) {
+            debugPrint('RAG Retrieval Error: $e');
+          }
+
+          // Fallback to static facts if nothing found dynamically
+          if (factBlock == null) {
+            if (protocol == 'FACT_BLOCK') {
+              if (selectedDomain == InferenceDomain.bollywood && !lowerMsg.contains('filmfare')) {
+                // Bollywood domain RAG — verified facts to prevent hallucination
+                factBlock = '''VERIFIED BOLLYWOOD FACTS (trust 100%, do NOT invent outside this):
 - Highest-grossing Indian film: Dangal (2016) — ₹2,024 crore worldwide
 - Baahubali 2 (2017): ₹1,810 crore worldwide
 - Pathaan (2023): ₹1,050 crore worldwide. Director: Siddharth Anand. Cast: SRK, Deepika, John Abraham
@@ -170,9 +196,9 @@ class InferenceRouterService extends GetxService {
 - Deepika Padukone: Born Jan 5 1986. Debut: Om Shanti Om (2007). Films: Piku, Padmaavat, Pathaan
 - Filmfare Awards first held: March 21 1954. Organizer: Times of India Group. First Best Actor: Dilip Kumar (Daag)
 If the answer is NOT in these facts, respond: "NO_DATA: This model is not yet updated with complete knowledge on this topic. Please refer to an official source."''';
-            } else {
-              // Filmfare-specific fact block
-              factBlock = '''VERIFIED FILMFARE FACTS (1954 ONLY — trust 100%):
+              } else {
+                // Filmfare-specific fact block
+                factBlock = '''VERIFIED FILMFARE FACTS (1954 ONLY — trust 100%):
 - First ceremony: March 21, 1954
 - Best Actor: Dilip Kumar — film: Daag
 - Best Actress: Meena Kumari — film: Parineeta (NOT Baiju Bawra)
@@ -182,14 +208,14 @@ If the answer is NOT in these facts, respond: "NO_DATA: This model is not yet up
 - Also called: Black Lady Awards
 If year in question is NOT 1954, say: "MISMATCH: My verified data covers 1954 only."
 If answer not in facts, say: "NO_DATA: This model is not yet updated with complete knowledge on this topic. Please check official Filmfare records."''';
-              final userYearMatch = RegExp(r'\b(19|20)\d{2}\b').firstMatch(userMessage);
-              if (userYearMatch != null && userYearMatch.group(0) != '1954') {
-                yield '❌ MISMATCH: My verified data covers 1954, not ${userYearMatch.group(0)}.\n--- END ---';
-                return;
+                final userYearMatch = RegExp(r'\b(19|20)\d{2}\b').firstMatch(userMessage);
+                if (userYearMatch != null && userYearMatch.group(0) != '1954') {
+                  yield '❌ MISMATCH: My verified data covers 1954, not ${userYearMatch.group(0)}.\n--- END ---';
+                  return;
+                }
               }
             }
           }
-
 
           final finalUserPrompt = hardening.buildFactualPrompt(
             question: userMessage,

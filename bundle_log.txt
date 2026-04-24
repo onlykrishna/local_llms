@@ -1,0 +1,218 @@
+[  +58 ms] executing: sysctl hw.optional.arm64
+[  +13 ms] Exit code 1 from: sysctl hw.optional.arm64
+[        ] sysctl: unknown oid 'hw.optional.arm64'
+[  +19 ms] Artifact Instance of 'MaterialFonts' is not required, skipping update.
+[        ] Artifact Instance of 'GradleWrapper' is not required, skipping update.
+[        ] Artifact Instance of 'AndroidGenSnapshotArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'AndroidInternalBuildArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'IOSEngineArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'FlutterWebSdk' is not required, skipping update.
+[   +1 ms] Artifact Instance of 'LegacyCanvasKitRemover' is not required, skipping update.
+[        ] Artifact Instance of 'FlutterSdk' is not required, skipping update.
+[        ] Artifact Instance of 'WindowsEngineArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'MacOSEngineArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'LinuxEngineArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'LinuxFuchsiaSDKArtifacts' is not required, skipping update.
+[   +1 ms] Artifact Instance of 'MacOSFuchsiaSDKArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'FlutterRunnerSDKArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'FlutterRunnerDebugSymbols' is not required, skipping update.
+[        ] Artifact Instance of 'IosUsbArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'IosUsbArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'IosUsbArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'IosUsbArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'IosUsbArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'IosUsbArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'FontSubsetArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'PubDependencies' is not required, skipping update.
+[   +1 ms] executing: [/Users/aeologic/Documents/FlutterSetup/flutter/] git -c log.showSignature=false log HEAD -n 1 --pretty=format:%ad --date=iso
+[  +43 ms] Exit code 0 from: git -c log.showSignature=false log HEAD -n 1 --pretty=format:%ad --date=iso
+[        ] 2026-03-17 16:14:01 -0700
+[  +23 ms] Artifact Instance of 'AndroidGenSnapshotArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'AndroidInternalBuildArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'IOSEngineArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'FlutterWebSdk' is not required, skipping update.
+[        ] Artifact Instance of 'FlutterEngineStamp' is not required, skipping update.
+[        ] Artifact Instance of 'LegacyCanvasKitRemover' is not required, skipping update.
+[  +31 ms] Artifact Instance of 'WindowsEngineArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'MacOSEngineArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'LinuxEngineArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'LinuxFuchsiaSDKArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'MacOSFuchsiaSDKArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'FlutterRunnerSDKArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'FlutterRunnerDebugSymbols' is not required, skipping update.
+[  +73 ms] Artifact Instance of 'MaterialFonts' is not required, skipping update.
+[        ] Artifact Instance of 'GradleWrapper' is not required, skipping update.
+[        ] Artifact Instance of 'AndroidGenSnapshotArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'AndroidInternalBuildArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'IOSEngineArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'FlutterWebSdk' is not required, skipping update.
+[        ] Artifact Instance of 'FlutterEngineStamp' is not required, skipping update.
+[        ] Artifact Instance of 'LegacyCanvasKitRemover' is not required, skipping update.
+[        ] Artifact Instance of 'FlutterSdk' is not required, skipping update.
+[        ] Artifact Instance of 'WindowsEngineArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'MacOSEngineArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'LinuxEngineArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'LinuxFuchsiaSDKArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'MacOSFuchsiaSDKArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'FlutterRunnerSDKArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'FlutterRunnerDebugSymbols' is not required, skipping update.
+[        ] Artifact Instance of 'IosUsbArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'IosUsbArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'IosUsbArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'IosUsbArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'IosUsbArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'IosUsbArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'FontSubsetArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'PubDependencies' is not required, skipping update.
+[  +27 ms] Skipping pub get: version match.
+[ +190 ms] Found plugin path_provider at /Users/aeologic/.pub-cache/hosted/pub.dev/path_provider-2.1.5/
+[   +6 ms] Found plugin path_provider_windows at /Users/aeologic/.pub-cache/hosted/pub.dev/path_provider_windows-2.3.0/
+[   +8 ms] Found plugin path_provider_linux at /Users/aeologic/.pub-cache/hosted/pub.dev/path_provider_linux-2.2.1/
+[   +4 ms] Found plugin path_provider_foundation at /Users/aeologic/.pub-cache/hosted/pub.dev/path_provider_foundation-2.6.0/
+[  +12 ms] Found plugin path_provider_android at /Users/aeologic/.pub-cache/hosted/pub.dev/path_provider_android-2.3.1/
+[   +2 ms] Found plugin jni_flutter at /Users/aeologic/.pub-cache/hosted/pub.dev/jni_flutter-1.0.1/
+[   +1 ms] Found plugin jni at /Users/aeologic/.pub-cache/hosted/pub.dev/jni-1.0.0/
+[  +18 ms] Found plugin file_picker at /Users/aeologic/.pub-cache/hosted/pub.dev/file_picker-8.3.7/
+[  +16 ms] Found plugin flutter_plugin_android_lifecycle at /Users/aeologic/.pub-cache/hosted/pub.dev/flutter_plugin_android_lifecycle-2.0.34/
+[   +8 ms] Found plugin connectivity_plus at /Users/aeologic/.pub-cache/hosted/pub.dev/connectivity_plus-6.1.5/
+[ +145 ms] Found plugin path_provider at /Users/aeologic/.pub-cache/hosted/pub.dev/path_provider-2.1.5/
+[   +2 ms] Found plugin path_provider_windows at /Users/aeologic/.pub-cache/hosted/pub.dev/path_provider_windows-2.3.0/
+[   +8 ms] Found plugin path_provider_linux at /Users/aeologic/.pub-cache/hosted/pub.dev/path_provider_linux-2.2.1/
+[   +3 ms] Found plugin path_provider_foundation at /Users/aeologic/.pub-cache/hosted/pub.dev/path_provider_foundation-2.6.0/
+[   +7 ms] Found plugin path_provider_android at /Users/aeologic/.pub-cache/hosted/pub.dev/path_provider_android-2.3.1/
+[   +1 ms] Found plugin jni_flutter at /Users/aeologic/.pub-cache/hosted/pub.dev/jni_flutter-1.0.1/
+[   +2 ms] Found plugin jni at /Users/aeologic/.pub-cache/hosted/pub.dev/jni-1.0.0/
+[  +18 ms] Found plugin file_picker at /Users/aeologic/.pub-cache/hosted/pub.dev/file_picker-8.3.7/
+[   +3 ms] Found plugin flutter_plugin_android_lifecycle at /Users/aeologic/.pub-cache/hosted/pub.dev/flutter_plugin_android_lifecycle-2.0.34/
+[   +3 ms] Found plugin connectivity_plus at /Users/aeologic/.pub-cache/hosted/pub.dev/connectivity_plus-6.1.5/
+[   +8 ms] Generating /Users/aeologic/StudioProjects/offline_ai_flutter_demo/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
+[  +18 ms] Skipping generating GeneratedPluginRegistrant.java because it is up-to-date.
+[   +3 ms] Skipping generating GeneratedPluginRegistrant.h because it is up-to-date.
+[   +2 ms] Skipping generating GeneratedPluginRegistrant.m because it is up-to-date.
+[  +16 ms] executing: sysctl hw.optional.arm64
+[   +8 ms] Exit code 1 from: sysctl hw.optional.arm64
+[        ] sysctl: unknown oid 'hw.optional.arm64'
+[        ] executing: xcrun xcodebuild -version
+[ +170 ms] Exit code 0 from: xcrun xcodebuild -version
+[        ] Xcode 16.0
+           Build version 16A242d
+[ +121 ms] Initializing file store
+[  +31 ms] dart_build: Starting due to {}
+[   +1 ms] Skipping target: gen_localizations
+[   +3 ms] gen_dart_plugin_registrant: Starting due to {InvalidatedReasonKind.outputSetAddition: The following outputs were added to the output set: /Users/aeologic/StudioProjects/offline_ai_flutter_demo/.dart_tool/flutter_build/dart_plugin_registrant.dart, InvalidatedReasonKind.inputChanged: The following inputs have updated contents: /Users/aeologic/StudioProjects/offline_ai_flutter_demo/.dart_tool/package_config.json}
+[ +132 ms] Building native assets for android_arm.
+[  +80 ms] Running `/Users/aeologic/Documents/FlutterSetup/flutter/bin/cache/dart-sdk/bin/dart compile kernel --packages=/Users/aeologic/StudioProjects/offline_ai_flutter_demo/.dart_tool/package_config.json --output=/Users/aeologic/StudioProjects/offline_ai_flutter_demo/.dart_tool/hooks_runner/objective_c/91e8d51b9e/hook.dill --depfile=/Users/aeologic/StudioProjects/offline_ai_flutter_demo/.dart_tool/hooks_runner/objective_c/91e8d51b9e/hook.dill.d /Users/aeologic/.pub-cache/hosted/pub.dev/objective_c-9.3.0/hook/build.dart`.
+[  +60 ms] Found plugin path_provider at /Users/aeologic/.pub-cache/hosted/pub.dev/path_provider-2.1.5/
+[   +1 ms] Found plugin path_provider_windows at /Users/aeologic/.pub-cache/hosted/pub.dev/path_provider_windows-2.3.0/
+[   +5 ms] Found plugin path_provider_linux at /Users/aeologic/.pub-cache/hosted/pub.dev/path_provider_linux-2.2.1/
+[  +24 ms] Found plugin path_provider_foundation at /Users/aeologic/.pub-cache/hosted/pub.dev/path_provider_foundation-2.6.0/
+[   +8 ms] Found plugin path_provider_android at /Users/aeologic/.pub-cache/hosted/pub.dev/path_provider_android-2.3.1/
+[   +1 ms] Found plugin jni_flutter at /Users/aeologic/.pub-cache/hosted/pub.dev/jni_flutter-1.0.1/
+[   +1 ms] Found plugin jni at /Users/aeologic/.pub-cache/hosted/pub.dev/jni-1.0.0/
+[  +25 ms] Found plugin file_picker at /Users/aeologic/.pub-cache/hosted/pub.dev/file_picker-8.3.7/
+[   +9 ms] Found plugin flutter_plugin_android_lifecycle at /Users/aeologic/.pub-cache/hosted/pub.dev/flutter_plugin_android_lifecycle-2.0.34/
+[   +8 ms] Found plugin connectivity_plus at /Users/aeologic/.pub-cache/hosted/pub.dev/connectivity_plus-6.1.5/
+[  +20 ms] Skipping generating dart_plugin_registrant.dart because it is up-to-date.
+[        ] gen_dart_plugin_registrant: Complete
+[   +4 ms] kernel_snapshot_program: Starting due to {}
+[  +26 ms] /Users/aeologic/Documents/FlutterSetup/flutter/bin/cache/dart-sdk/bin/dartaotruntime /Users/aeologic/Documents/FlutterSetup/flutter/bin/cache/dart-sdk/bin/snapshots/frontend_server_aot.dart.snapshot --sdk-root /Users/aeologic/Documents/FlutterSetup/flutter/bin/cache/artifacts/engine/common/flutter_patched_sdk/ --target=flutter --no-print-incremental-dependencies -DFLUTTER_VERSION=3.41.5 -DFLUTTER_CHANNEL=stable -DFLUTTER_GIT_URL=https://github.com/flutter/flutter.git -DFLUTTER_FRAMEWORK_REVISION=2c9eb20739 -DFLUTTER_ENGINE_REVISION=052f31d115 -DFLUTTER_DART_VERSION=3.11.3 -Ddart.vm.profile=false -Ddart.vm.product=false --enable-asserts --track-widget-creation --no-link-platform --packages /Users/aeologic/StudioProjects/offline_ai_flutter_demo/.dart_tool/package_config.json --output-dill /Users/aeologic/StudioProjects/offline_ai_flutter_demo/.dart_tool/flutter_build/a0e081ba80cd96eea5c3f3d3b67d0e2c/app.dill --depfile /Users/aeologic/StudioProjects/offline_ai_flutter_demo/.dart_tool/flutter_build/a0e081ba80cd96eea5c3f3d3b67d0e2c/kernel_snapshot_program.d --filesystem-scheme org-dartlang-root --incremental --initialize-from-dill /Users/aeologic/StudioProjects/offline_ai_flutter_demo/.dart_tool/flutter_build/a0e081ba80cd96eea5c3f3d3b67d0e2c/app.dill --source file:///Users/aeologic/StudioProjects/offline_ai_flutter_demo/.dart_tool/flutter_build/dart_plugin_registrant.dart --source package:flutter/src/dart_plugin_registrant.dart -Dflutter.dart_plugin_registrant=file:///Users/aeologic/StudioProjects/offline_ai_flutter_demo/.dart_tool/flutter_build/dart_plugin_registrant.dart --verbosity=error package:offline_ai_flutter_demo/main.dart
+[+1222 ms] input.json contents:
+           {
+             "assets": {},
+             "config": {
+               "build_asset_types": [
+                 "code_assets/code"
+               ],
+               "extensions": {
+                 "code_assets": {
+                   "android": {
+                     "target_ndk_api": 24
+                   },
+                   "c_compiler": {
+                     "ar": "/Users/aeologic/Library/Android/sdk/ndk/29.0.14206865/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-ar",
+                     "cc": "/Users/aeologic/Library/Android/sdk/ndk/29.0.14206865/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang",
+                     "ld": "/Users/aeologic/Library/Android/sdk/ndk/29.0.14206865/toolchains/llvm/prebuilt/darwin-x86_64/bin/ld.lld"
+                   },
+                   "link_mode_preference": "dynamic",
+                   "target_architecture": "arm",
+                   "target_os": "android"
+                 }
+               },
+               "linking_enabled": false
+             },
+             "out_dir_shared": "/Users/aeologic/StudioProjects/offline_ai_flutter_demo/.dart_tool/hooks_runner/shared/objective_c/build/",
+             "out_file": "/Users/aeologic/StudioProjects/offline_ai_flutter_demo/.dart_tool/hooks_runner/objective_c/91e8d51b9e/output.json",
+             "package_name": "objective_c",
+             "package_root": "/Users/aeologic/.pub-cache/hosted/pub.dev/objective_c-9.3.0/",
+             "user_defines": {}
+           }
+[  +42 ms] Running `(cd /Users/aeologic/.pub-cache/hosted/pub.dev/objective_c-9.3.0/; TMPDIR=/var/folders/dj/x_d31_7x697fbfk6fbb2fffh0000gn/T/ PATH=/Users/aeologic/.antigravity/antigravity/bin:/usr/local/opt/openjdk@17/bin:/usr/local/opt/openjdk@11/bin:/usr/local/opt/openjdk@11/bin:/usr/local/opt/openjdk@11/bin:/Users/aeologic/Documents/FlutterSetup/flutter/bin:/usr/local/lib/ruby/gems/3.3.0/bin:/usr/local/opt/ruby/bin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/Library/Apple/usr/bin:/Users/aeologic/.rvm/bin HOME=/Users/aeologic /Users/aeologic/Documents/FlutterSetup/flutter/bin/cache/dart-sdk/bin/dart --packages=/Users/aeologic/StudioProjects/offline_ai_flutter_demo/.dart_tool/package_config.json /Users/aeologic/StudioProjects/offline_ai_flutter_demo/.dart_tool/hooks_runner/objective_c/91e8d51b9e/hook.dill --config=/Users/aeologic/StudioProjects/offline_ai_flutter_demo/.dart_tool/hooks_runner/objective_c/91e8d51b9e/input.json )`.
+[ +270 ms] output.json contents:
+           {
+             "assets_for_linking": {},
+             "status": "success",
+             "timestamp": "2026-04-23 17:04:14.000"
+           }
+[  +63 ms] Running `/Users/aeologic/Documents/FlutterSetup/flutter/bin/cache/dart-sdk/bin/dart compile kernel --packages=/Users/aeologic/StudioProjects/offline_ai_flutter_demo/.dart_tool/package_config.json --output=/Users/aeologic/StudioProjects/offline_ai_flutter_demo/.dart_tool/hooks_runner/llamadart/91e8d51b9e/hook.dill --depfile=/Users/aeologic/StudioProjects/offline_ai_flutter_demo/.dart_tool/hooks_runner/llamadart/91e8d51b9e/hook.dill.d /Users/aeologic/.pub-cache/hosted/pub.dev/llamadart-0.6.10/hook/build.dart`.
+[+2154 ms] input.json contents:
+           {
+             "assets": {},
+             "config": {
+               "build_asset_types": [
+                 "code_assets/code"
+               ],
+               "extensions": {
+                 "code_assets": {
+                   "android": {
+                     "target_ndk_api": 24
+                   },
+                   "c_compiler": {
+                     "ar": "/Users/aeologic/Library/Android/sdk/ndk/29.0.14206865/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-ar",
+                     "cc": "/Users/aeologic/Library/Android/sdk/ndk/29.0.14206865/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang",
+                     "ld": "/Users/aeologic/Library/Android/sdk/ndk/29.0.14206865/toolchains/llvm/prebuilt/darwin-x86_64/bin/ld.lld"
+                   },
+                   "link_mode_preference": "dynamic",
+                   "target_architecture": "arm",
+                   "target_os": "android"
+                 }
+               },
+               "linking_enabled": false
+             },
+             "out_dir_shared": "/Users/aeologic/StudioProjects/offline_ai_flutter_demo/.dart_tool/hooks_runner/shared/llamadart/build/",
+             "out_file": "/Users/aeologic/StudioProjects/offline_ai_flutter_demo/.dart_tool/hooks_runner/llamadart/91e8d51b9e/output.json",
+             "package_name": "llamadart",
+             "package_root": "/Users/aeologic/.pub-cache/hosted/pub.dev/llamadart-0.6.10/",
+             "user_defines": {}
+           }
+[   +2 ms] Running `(cd /Users/aeologic/.pub-cache/hosted/pub.dev/llamadart-0.6.10/; TMPDIR=/var/folders/dj/x_d31_7x697fbfk6fbb2fffh0000gn/T/ PATH=/Users/aeologic/.antigravity/antigravity/bin:/usr/local/opt/openjdk@17/bin:/usr/local/opt/openjdk@11/bin:/usr/local/opt/openjdk@11/bin:/usr/local/opt/openjdk@11/bin:/Users/aeologic/Documents/FlutterSetup/flutter/bin:/usr/local/lib/ruby/gems/3.3.0/bin:/usr/local/opt/ruby/bin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/Library/Apple/usr/bin:/Users/aeologic/.rvm/bin HOME=/Users/aeologic /Users/aeologic/Documents/FlutterSetup/flutter/bin/cache/dart-sdk/bin/dart --packages=/Users/aeologic/StudioProjects/offline_ai_flutter_demo/.dart_tool/package_config.json /Users/aeologic/StudioProjects/offline_ai_flutter_demo/.dart_tool/hooks_runner/llamadart/91e8d51b9e/hook.dill --config=/Users/aeologic/StudioProjects/offline_ai_flutter_demo/.dart_tool/hooks_runner/llamadart/91e8d51b9e/input.json )`.
+[ +258 ms] output.json contents:
+           {
+             "assets_for_linking": {},
+             "status": "success",
+             "timestamp": "2026-04-23 17:04:17.000"
+           }
+[   +5 ms] Building native assets for android_arm done.
+[   +4 ms] dart_build: Complete
+[   +5 ms] install_code_assets: Starting due to {}
+[   +4 ms] Writing native assets json to file:///Users/aeologic/StudioProjects/offline_ai_flutter_demo/.dart_tool/flutter_build/a0e081ba80cd96eea5c3f3d3b67d0e2c/native_assets.json.
+[   +1 ms] Writing /Users/aeologic/StudioProjects/offline_ai_flutter_demo/.dart_tool/flutter_build/a0e081ba80cd96eea5c3f3d3b67d0e2c/native_assets.json done.
+[        ] install_code_assets: Complete
+[+587583 ms] kernel_snapshot_program: Complete
+[+1041820 ms] Persisting file store
+[ +157 ms] Done persisting file store
+[   +8 ms] "flutter bundle" took 16,35,054ms.
+[  +17 ms] executing: sw_vers -productName
+[  +32 ms] Exit code 0 from: sw_vers -productName
+[        ] macOS
+[        ] executing: sw_vers -productVersion
+[  +27 ms] Exit code 0 from: sw_vers -productVersion
+[        ] 15.7.4
+[        ] executing: sw_vers -buildVersion
+[  +22 ms] Exit code 0 from: sw_vers -buildVersion
+[        ] 24G517
+[        ] executing: uname -m
+[  +10 ms] Exit code 0 from: uname -m
+[        ] x86_64
+[        ] Running 1 shutdown hook
+[   +2 ms] Shutdown hooks complete
+[        ] exiting with code 1
