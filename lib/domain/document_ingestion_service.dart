@@ -26,6 +26,14 @@ class DocumentIngestionService extends GetxService {
     ingestionProgress.value = 0.0;
     final fileName = file.path.split('/').last;
 
+    // STEP 1: Clear existing chunks for this domain first to prevent duplicates/stale data
+    final existingIds = chunkBox
+        .query(DocumentChunk_.domain.equals(domain.name))
+        .build()
+        .findIds();
+    chunkBox.removeMany(existingIds);
+    debugPrint('[Ingestion] Cleared ${existingIds.length} old chunks for domain: ${domain.name}');
+
     final sourceDoc = SourceDocument(
       fileName: fileName,
       filePath: file.path,
@@ -59,27 +67,51 @@ class DocumentIngestionService extends GetxService {
       if (totalChunks == 0) {
         debugPrint('[Ingestion] WARNING: No chunks generated for document $fileName');
       }
+
+      final List<DocumentChunk> validChunks = [];
       final int batchSize = 16;
+      
       for (int i = 0; i < totalChunks; i += batchSize) {
         final end = (i + batchSize < totalChunks) ? i + batchSize : totalChunks;
         final batch = allChunks.sublist(i, end);
         
         final textsToEmbed = batch.map((c) => c.text).toList();
-        final embeddings = await embeddingService.embedBatch(textsToEmbed);
+        final List<List<double>> embeddings = await embeddingService.embedBatch(textsToEmbed);
         
         for (int j = 0; j < batch.length; j++) {
-          batch[j].embedding = embeddings[j];
+          final vector = embeddings[j];
+          
+          // STEP 2: Validate embedding is not corrupted (norm should be ~1.0)
+          double norm = 0;
+          for (final v in vector) norm += v * v;
+          norm = sqrt(norm);
+          
+          if (norm < 0.5 || norm > 1.5) {
+            debugPrint('[Ingestion] ⚠️ Bad embedding chunk $i+$j, norm=$norm, skipping');
+            continue;
+          }
+
+          // ✅ Store as List<double> explicitly
+          batch[j].embedding = vector.map((v) => v.toDouble()).toList();
+          validChunks.add(batch[j]);
+          
+          if (i + j < 5) {
+            debugPrint('[Ingestion] ✅ Chunk ${i + j}: norm=${norm.toStringAsFixed(3)} text="${batch[j].text.substring(0, min(30, batch[j].text.length))}..."');
+          }
         }
         
         chunkBox.putMany(batch);
         debugPrint('[Ingestion] Saved batch of ${batch.length} chunks. Total so far: ${i + batch.length}');
-        ingestionProgress.value = 0.5 + ((end / totalChunks) * 0.5); // remaining 50%
+        
+        // Fix 4B: Prevent NaN in progress calculation
+        final progress = 0.5 + ((end / (totalChunks > 0 ? totalChunks : 1)) * 0.5);
+        ingestionProgress.value = progress.isNaN || progress.isInfinite ? 0.5 : progress;
       }
 
       sourceDoc.status = 'ready';
-      sourceDoc.chunkCount = totalChunks;
+      sourceDoc.chunkCount = validChunks.length;
       docBox.put(sourceDoc);
-      debugPrint('[Ingestion] Document ready: $fileName with $totalChunks chunks in domain: ${domain.name}');
+      debugPrint('[Ingestion] Document ready: $fileName with ${validChunks.length} valid chunks in domain: ${domain.name}');
       ingestionProgress.value = 1.0;
 
     } catch (e) {
@@ -96,6 +128,15 @@ class DocumentIngestionService extends GetxService {
     text = text.replaceAll(RegExp(r'\r\n'), '\n');
     text = text.replaceAll(RegExp(r'\n{3,}'), '\n\n'); // Max double newlines
     return text.trim();
+  }
+
+  // Fix 3B: Aggressively clean chunks to remove similarity-poisoning noise
+  static String _cleanChunkText(String text) {
+    return text
+        .replaceAll(RegExp(r'[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E6}-\u{1F1FF}]', unicode: true), '') // Emojis
+        .replaceAll(RegExp(r'(FAQs|Terms & Conditions|Privacy Policy|Page \d+|Confidential)', caseSensitive: false), '') // Generic headers
+        .replaceAll(RegExp(r'\s+'), ' ') // Normalize whitespace
+        .trim();
   }
 }
 
@@ -128,37 +169,69 @@ _ExtractionResult _extractAndChunkInIsolate(Map<String, dynamic> params) {
 
     if (text.isEmpty) continue;
 
-    // STEP 1: Try paragraph-based splitting first
-    final paragraphs = text
-        .split(RegExp(r'\n{2,}'))           // double newline = paragraph
-        .map((p) => p.replaceAll('\n', ' ').trim())
-        .where((p) => p.length > 80)        // skip very short fragments
+    // ── FAQ-BOUNDARY SPLITTER ────────────────────────────────────────────────
+    // Strategy: detect numbered FAQ question patterns like "01.", "09.", "1️0."
+    // and treat each as a hard chunk boundary so Q + A stay together.
+    //
+    // Pattern matches:
+    //   "01. WHAT IS EMI?"      → standard numbered FAQ
+    //   "1️0. WHAT IS LTV?"    → emoji-prefixed numbers (unicode digit variants)
+    //   "Q1.", "Q.1", etc.     → other common FAQ numbering
+    //
+    // We collect all Q+A pairs as discrete chunks per page.
+    // ────────────────────────────────────────────────────────────────────────
+
+    // Normalize unicode digit variants (emoji keycaps like 1️⃣ → 1)
+    String normalizedText = text
+        .replaceAll('\u0031\uFE0F\u20E3', '1')  // 1️⃣
+        .replaceAll('\u0032\uFE0F\u20E3', '2')  // 2️⃣
+        .replaceAll('\u0033\uFE0F\u20E3', '3')  // 3️⃣
+        .replaceAll('\u0034\uFE0F\u20E3', '4')  // 4️⃣
+        .replaceAll('\u0035\uFE0F\u20E3', '5')  // 5️⃣
+        .replaceAll('\u0036\uFE0F\u20E3', '6')  // 6️⃣
+        .replaceAll('\u0037\uFE0F\u20E3', '7')  // 7️⃣
+        .replaceAll('\u0038\uFE0F\u20E3', '8')  // 8️⃣
+        .replaceAll('\u0039\uFE0F\u20E3', '9')  // 9️⃣
+        .replaceAll('\u{1F51F}', '10');          // 🔟
+
+    // Split by FAQ boundary: lines starting with number pattern like "01.", "1.", "10."
+    // The regex uses a lookahead so we keep the delimiter at the start of each segment
+    final faqBoundary = RegExp(r'(?=(?:^|\n)\s*\d{1,2}[\.。]\s+[A-Z])', multiLine: true);
+    List<String> faqSegments = normalizedText.split(faqBoundary)
+        .map((s) => s.replaceAll('\n', ' ').replaceAll(RegExp(r'\s+'), ' ').trim())
+        .where((s) => s.isNotEmpty)
         .toList();
 
-    List<String> pageChunks = [];
-    if (paragraphs.length > 1) {
-      // Multiple paragraphs found — use them as natural chunks
-      for (final para in paragraphs) {
-        if (para.length <= 600) {
-          // Paragraph fits in one chunk
-          pageChunks.add(para);
-        } else {
-          // Long paragraph — split at sentence boundaries
-          pageChunks.addAll(_splitIntoSentences(para));
-        }
-      }
-    } else {
-      // No paragraph structure — split by sentences
-      pageChunks.addAll(_splitIntoSentences(text));
+    // If no FAQ boundaries found (plain prose page), fall back to paragraph split
+    if (faqSegments.length <= 1) {
+      faqSegments = normalizedText
+          .split(RegExp(r'\n{2,}'))
+          .map((p) => p.replaceAll('\n', ' ').trim())
+          .where((p) => p.isNotEmpty)
+          .toList();
     }
 
-    for (final chunkText in pageChunks) {
+    // Now emit each segment as its own chunk (split large ones by sentences)
+    List<String> pageChunks = [];
+    for (final seg in faqSegments) {
+      if (seg.length <= 900) {
+        pageChunks.add(seg);
+      } else {
+        // Large answer block — split further by sentence
+        pageChunks.addAll(_splitIntoSentences(seg));
+      }
+    }
+
+    for (final rawChunkText in pageChunks) {
+      final cleanChunkText = DocumentIngestionService._cleanChunkText(rawChunkText);
+      if (cleanChunkText.length < 20) continue;
+
       allChunks.add(DocumentChunk(
         sourceDocId: docId,
         domain: domain,
         chunkIndex: chunkIndex++,
         pageNumber: i + 1,
-        text: chunkText,
+        text: cleanChunkText,
         sourceLabel: '$fileName, p.${i + 1}',
         createdAt: DateTime.now(),
       ));
@@ -195,7 +268,8 @@ List<String> _splitIntoSentences(String text) {
       continue;
     }
 
-    if (wordCount + wordCountInSentence > 120 && buffer.isNotEmpty) {
+    // Fix 3A: Reduce target chunk size to 80 words for better discriminative search
+    if (wordCount + wordCountInSentence > 80 && buffer.isNotEmpty) {
       chunks.add(buffer.join(' '));
       buffer.clear();
       wordCount = 0;

@@ -31,7 +31,7 @@ class SettingsService extends GetxService {
     isDarkMode.value = _storage.read('is_dark_mode') ?? false;
     contextWindow.value = _storage.read('context_window') ?? 10;
     
-    selectedModelId.value = _storage.read('active_model_id') ?? '';
+    selectedModelId.value = _storage.read('active_model_id') ?? 'qwen2_5_1_5b';
     selectedModel.value = await getActiveModelPath() ?? '';
     
     enableDomainValidation.value = _storage.read('enable_domain_validation') ?? true;

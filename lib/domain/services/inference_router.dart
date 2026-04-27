@@ -179,16 +179,59 @@ class InferenceRouterService extends GetxService {
               int totalContextChars = 0;
               const int maxContextChars = 2000; // ~500-600 tokens
 
-              for (int i = 0; i < lastRetrievedChunks!.length; i++) {
-                 final chunk = lastRetrievedChunks![i];
-                 if (totalContextChars + chunk.text.length > maxContextChars) {
-                   debugPrint('[RAG] Context cap reached. Skipping remaining chunks.');
-                   break;
-                 }
-                 // v3.3: Include source metadata for grounded citations
-                 buffer.writeln('[Source: ${chunk.sourceLabel}, p.${chunk.pageNumber}] ${chunk.text}');
+              for (final chunk in lastRetrievedChunks!) {
+                 if (totalContextChars + chunk.text.length > maxContextChars) break;
+                 buffer.writeln('---');
+                 buffer.writeln('SOURCE: ${chunk.sourceLabel}');
+                 buffer.writeln('CONTENT: ${chunk.text}');
                  totalContextChars += chunk.text.length;
               }
+
+              // ── START DIRECT BYPASS (v4.0) ──────────────────────────────────
+              // If keyword matching is extremely high, we return the fact directly.
+              final topChunk = lastRetrievedChunks!.first;
+              final topScore = topChunk.score; // keyword coverage is part of the score now
+              final coverage = topChunk.score - (topChunk.score > 1.0 ? 1.0 : 0.0);
+
+              debugPrint('[RAG] Direct bypass check: coverage=$coverage hits=${lastRetrievedChunks?.length}');
+
+              if (coverage >= 0.4) {
+                debugPrint('[RAG] DIRECT BYPASS: Returning chunk text without LLM');
+
+                // ── Strip ALL question prefixes from chunk text ─────────────
+                String answerText = topChunk.text.trim();
+                
+                // Pattern: (Optional number) followed by (UPPER-CASE question text) and '?'
+                // We strip this pattern iteratively to handle merged chunks.
+                final qHeaderPattern = RegExp(r'^(\d{1,2}\.\s*)?([^a-z\n]+?\?\s*)', multiLine: true);
+                int safetyLimit = 5;
+                while (qHeaderPattern.hasMatch(answerText) && safetyLimit-- > 0) {
+                  final m = qHeaderPattern.firstMatch(answerText)!;
+                  answerText = answerText.substring(m.end).trim();
+                }
+
+                // ── Derive clean topic from the USER's question ────────────
+                String topic = userMessage
+                    .split(RegExp(r'[?!]'))[0]
+                    .trim()
+                    .replaceAll(RegExp(r'^(what is|what are|how does|how do|how|who can|who|when|why|do|does|can|is|are|for what)\s+', caseSensitive: false), '')
+                    .trim();
+                if (topic.isNotEmpty) {
+                  topic = topic[0].toUpperCase() + topic.substring(1);
+                }
+
+                // ── Build the sources list ────────────────────────────────
+                final sourcesText = lastRetrievedChunks!
+                    .asMap()
+                    .entries
+                    .map((e) => '${e.key + 1}. ${e.value.sourceLabel}')
+                    .join('\n');
+
+                // ── Emit structured markdown ──────────────────────────────
+                yield '**$topic**\n\n$answerText\n\n**Sources**\n\n$sourcesText';
+                return;
+              }
+              // ── END DIRECT BYPASS ─────────────────────────────────────────────
               
               buffer.writeln('\nRules for answering:');
               buffer.writeln('1. Use ONLY the facts above.');
@@ -234,8 +277,19 @@ class InferenceRouterService extends GetxService {
             // Apply lightweight sanitization per chunk
             String sanitized = chunk.replaceAll(RegExp(r'<[^>]*>'), ''); // basic tag stripping
             
-            if (sanitized.isNotEmpty) {
-              yield sanitized;
+            // ── Strip ALL question prefixes from chunk text ─────────────
+            String answerText = sanitized.trim();
+            // Pattern: (Optional number) followed by (UPPER-CASE question text) and '?'
+            // We strip this pattern iteratively to handle merged chunks.
+            final qHeaderPattern = RegExp(r'^(\d{1,2}\.\s*)?([^a-z\n]+?\?\s*)', multiLine: true);
+            int safetyLimit = 5;
+            while (qHeaderPattern.hasMatch(answerText) && safetyLimit-- > 0) {
+              final m = qHeaderPattern.firstMatch(answerText)!;
+              answerText = answerText.substring(m.end).trim();
+            }
+
+            if (answerText.isNotEmpty) {
+              yield answerText;
               meaningfulChunkCount++;
             }
           }

@@ -8,10 +8,12 @@ import '../../domain/document_ingestion_service.dart';
 import '../../domain/kb_domain.dart';
 import '../../data/source_document.dart';
 import '../../data/document_chunk.dart';
+import '../../domain/rag_retrieval_service.dart';
 import '../../objectbox.g.dart';
 
 class KbManagerController extends GetxController {
   final DocumentIngestionService ingestionService = Get.find();
+  final RagRetrievalService retrievalService = Get.find();
   final Store store;
   late final Box<SourceDocument> docBox;
 
@@ -27,6 +29,8 @@ class KbManagerController extends GetxController {
   void onInit() {
     super.onInit();
     loadDocuments();
+    // Run diagnostics to verify embedding health
+    retrievalService.diagnoseEmbeddings();
   }
 
   void loadDocuments() {
@@ -115,7 +119,9 @@ class KbManagerPage extends StatelessWidget {
                     const Text('Ingesting Document...'),
                     const SizedBox(height: 8),
                     LinearProgressIndicator(
-                      value: controller.ingestionService.ingestionProgress.value,
+                      value: controller.ingestionService.ingestionProgress.value.isNaN
+                          ? 0.0
+                          : controller.ingestionService.ingestionProgress.value.clamp(0.0, 1.0),
                     ),
                   ],
                 ),

@@ -28,8 +28,15 @@ class OnDeviceInferenceService extends GetxService {
 
   final RxBool isLoading = false.obs;
   final RxBool isModelReady = false.obs;
+  final RxString loadingStage = 'Ready'.obs;
 
   bool get isModelLoaded => _isInitialized && _modelHandle != null;
+
+  @override
+  void onInit() {
+    super.onInit();
+    Future.microtask(() => warmup());
+  }
 
   @override
   void onClose() {
@@ -64,8 +71,11 @@ class OnDeviceInferenceService extends GetxService {
     await _disposeHandles();
   }
 
+  Future<bool>? _initFuture;
+
   /// Public method to pre-load the model (Warm Start)
   Future<bool> warmup() async {
+    if (_initFuture != null) return await _initFuture!;
     final currentPath = _settings.selectedModel.value;
     if (currentPath.isEmpty) return false;
     return await _ensureInitialized(currentPath, 'general');
@@ -73,6 +83,8 @@ class OnDeviceInferenceService extends GetxService {
 
   /// Initialize model and context for a specific GGUF file and domain.
   Future<bool> _ensureInitialized(String modelPath, String domainName) async {
+    if (_initFuture != null) return await _initFuture!;
+
     // Only reload if the model file itself changed. Domain changes don't require handle disposal.
     if (_isInitialized && 
         _initializedModelPath == modelPath &&
@@ -80,6 +92,15 @@ class OnDeviceInferenceService extends GetxService {
       return true;
     }
 
+    _initFuture = _doInitialize(modelPath, domainName);
+    try {
+      return await _initFuture!;
+    } finally {
+      _initFuture = null;
+    }
+  }
+
+  Future<bool> _doInitialize(String modelPath, String domainName) async {
     if (_isInitialized) {
       await _disposeHandles();
     }
@@ -87,43 +108,49 @@ class OnDeviceInferenceService extends GetxService {
     final valErr = await validateModelFile(modelPath);
     if (valErr != null) {
       debugPrint('>>> ONDEVICE: validation failed: $valErr');
+      loadingStage.value = 'Error: $valErr';
       return false;
     }
 
     isLoading.value = true;
+    loadingStage.value = 'Preparing engine...';
+    final sw = Stopwatch()..start();
     try {
       _backend = LlamaBackend();
       
-      bool isVeryLarge = modelPath.contains('3b') || modelPath.contains('4b') || 
-                         modelPath.contains('7b') || modelPath.contains('8b') ||
-                         modelPath.contains('12b') || modelPath.contains('27b') ||
-                         modelPath.contains('e2b') || modelPath.contains('e4b') ||
-                         modelPath.contains('phi-4-mini') || modelPath.contains('qwen2.5-3b');
+      bool isVeryLarge = modelPath.contains('1.5b') || modelPath.contains('3b') || 
+                         modelPath.contains('4b') || modelPath.contains('7b') || 
+                         modelPath.contains('8b') || modelPath.contains('12b') || 
+                         modelPath.contains('27b') || modelPath.contains('e2b') || 
+                         modelPath.contains('e4b') || modelPath.contains('phi-4-mini') || 
+                         modelPath.contains('qwen');
 
-      // v3.3: Increased context size to 4096 for RAG support on 1B models, 2048 for 3B+
+      loadingStage.value = 'Loading model weights... (1.1GB)';
+      
+      // Optimization for budget Android (M12): 8 cores available, use 8 threads for all-core boost
       final mParams = ModelParams(
-        contextSize: isVeryLarge ? 2048 : 4096, 
-        gpuLayers: Platform.isIOS ? 99 : 0, 
-        numberOfThreads: 4, 
-        batchSize: 512, 
-        preferredBackend: GpuBackend.auto,
+        gpuLayers: 0,
+        contextSize: 2048, // Increase to 2048 for all models to prevent truncation
+        numberOfThreads: 4, // 4 threads is optimal for iPhone A-series chips
+        batchSize: 64,
       );
 
-      debugPrint('>>> ONDEVICE: Loading model: $modelPath (Large=$isVeryLarge)');
-      _modelHandle = await _backend!.modelLoad(modelPath, mParams)
-          .timeout(const Duration(seconds: 300));
-
-      debugPrint('>>> ONDEVICE: Creating context...');
+      _modelHandle = await _backend!.modelLoad(modelPath, mParams);
+      
+      loadingStage.value = 'Initializing context...';
       _contextHandle = await _backend!.contextCreate(_modelHandle!, mParams);
-
+      
       _isInitialized = true;
       _initializedDomain = domainName;
       _initializedModelPath = modelPath;
       isModelReady.value = true;
-      debugPrint('>>> ONDEVICE: Initialization complete.');
+      loadingStage.value = 'Ready';
+      sw.stop();
+      debugPrint('>>> ONDEVICE: Total initialization complete in ${sw.elapsedMilliseconds}ms.');
       return true;
     } catch (e, stack) {
       debugPrint('>>> ONDEVICE: Init error: $e\n$stack');
+      loadingStage.value = 'Error: ${e.toString().split('\n').first}';
       await _disposeHandles();
       return false;
     } finally {
@@ -142,9 +169,6 @@ class OnDeviceInferenceService extends GetxService {
     final hardenedSystemPrompt = systemPrompt;
 
     final isFirstLoadForThisModel = !isModelReady.value || _initializedModelPath != currentPath;
-    if (isFirstLoadForThisModel) {
-      yield '🔄 Initializing local engine...\n(This can take 10-30s for large models)';
-    }
 
     try {
       final ok = await _ensureInitialized(currentPath, domainName).timeout(
@@ -181,6 +205,22 @@ class OnDeviceInferenceService extends GetxService {
     }
 
     try {
+      // RESET context by freeing and recreating (fast way to clear state if resetContext is missing)
+      if (_contextHandle != null) {
+        await _backend!.contextFree(_contextHandle!);
+      }
+      
+      final pathLower = _initializedModelPath?.toLowerCase() ?? '';
+      bool isVeryLarge = pathLower.contains('1.5b') || pathLower.contains('3b') || 
+                         pathLower.contains('qwen') || pathLower.contains('gemma');
+
+      final mParams = ModelParams(
+        contextSize: 2048, // Match initialization context size
+        numberOfThreads: 4,
+        batchSize: 64,
+      );
+      _contextHandle = await _backend!.contextCreate(_modelHandle!, mParams);
+
       final messages = [
         {'role': 'system', 'content': hardenedSystemPrompt},
         {'role': 'user', 'content': userMessage},
@@ -190,27 +230,16 @@ class OnDeviceInferenceService extends GetxService {
       try {
         prompt = await _backend!.applyChatTemplate(_modelHandle!, messages);
       } catch (_) {
-        // Fallbacks
-        final pathLower = currentPath.toLowerCase();
-        if (pathLower.contains('qwen')) {
-          prompt = '<|im_start|>system\n$hardenedSystemPrompt<|im_end|>\n<|im_start|>user\n$userMessage<|im_end|>\n<|im_start|>assistant\n';
-        } else if (pathLower.contains('gemma')) {
-          prompt = '<start_of_turn>user\n$userMessage<end_of_turn>\n<start_of_turn>model\n';
-        } else if (pathLower.contains('llama-3') || pathLower.contains('llama3')) {
-          prompt = '<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n$hardenedSystemPrompt<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n$userMessage<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n';
-        } else {
-          prompt = '### System:\n$hardenedSystemPrompt\n\n### User:\n$userMessage\n\n### Assistant:\n';
-        }
+        prompt = '<|im_start|>system\n$hardenedSystemPrompt<|im_end|>\n<|im_start|>user\n$userMessage<|im_end|>\n<|im_start|>assistant\n';
       }
 
-      debugPrint('>>> ONDEVICE: Starting generation with prompt length: ${prompt.length}');
-
-      final gParams = const GenerationParams(
-        maxTokens: 256,
-        temp: 0.1, // Slight temp for less looping but still factual
-        topP: 0.9,
-        penalty: 1.1,
-        topK: 40,
+      final gParams = GenerationParams(
+        maxTokens: 300, // Increase from 200 to allow full answers
+        temp: 0.1,
+        topP: 0.85,
+        topK: 20,
+        penalty: 1.05,
+        stopSequences: ['<|im_end|>', '<|endoftext|>'],
       );
 
       await for (final chunk in _backend!.generate(_contextHandle!, prompt, gParams)) {

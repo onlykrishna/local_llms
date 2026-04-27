@@ -16,108 +16,50 @@ class EmbeddingService {
   int _padTokenId = 0;
   int _maxLen = 256;
 
+  final Map<String, List<double>> _cache = {};
+
   Future<void> init() async {
+    // Fast init: OrtEnv and Vocab only
     OrtEnv.instance.init();
-    
-    // Load vocab
+    final sw = Stopwatch()..start();
     final vocabStr = await rootBundle.loadString('assets/models/vocab.txt');
     final lines = const LineSplitter().convert(vocabStr);
+    _vocab = {};
     for (int i = 0; i < lines.length; i++) {
       _vocab[lines[i]] = i;
-      if (lines[i] == '[UNK]') _unkTokenId = i;
-      if (lines[i] == '[CLS]') _clsTokenId = i;
-      if (lines[i] == '[SEP]') _sepTokenId = i;
-      if (lines[i] == '[PAD]') _padTokenId = i;
     }
+    _unkTokenId = _vocab['[UNK]'] ?? 100;
+    _clsTokenId = _vocab['[CLS]'] ?? 101;
+    _sepTokenId = _vocab['[SEP]'] ?? 102;
+    _padTokenId = _vocab['[PAD]'] ?? 0;
+    debugPrint('🚀 [EmbeddingService] Tokenizer ready in ${sw.elapsedMilliseconds}ms');
+  }
 
-    // Verify critical tokens exist
-    assert(_vocab.containsKey('[CLS]'), 'vocab.txt missing [CLS] token');
-    assert(_vocab.containsKey('[SEP]'), 'vocab.txt missing [SEP] token');
-    assert(_vocab.containsKey('[UNK]'), 'vocab.txt missing [UNK] token');
-    debugPrint('[Tokenizer] Loaded ${_vocab.length} tokens. '
-      'CLS=$_clsTokenId, SEP=$_sepTokenId, UNK=$_unkTokenId');
-
-    // Load ONNX model
-    final rawAssetFile = await rootBundle.load('assets/models/all-minilm-l6-v2.onnx');
-    final bytes = rawAssetFile.buffer.asUint8List();
-    
+  Future<void> _ensureSession() async {
+    if (_session != null) return;
+    final sw = Stopwatch()..start();
     final dir = await getApplicationDocumentsDirectory();
     final file = File('${dir.path}/all-minilm-l6-v2.onnx');
+    
     if (!await file.exists()) {
-      await file.writeAsBytes(bytes);
+      final rawAssetFile = await rootBundle.load('assets/models/all-minilm-l6-v2.onnx');
+      await file.writeAsBytes(rawAssetFile.buffer.asUint8List());
     }
     
     final sessionOptions = OrtSessionOptions();
     _session = OrtSession.fromFile(file, sessionOptions);
-  }
-
-  List<int> _tokenize(String text) {
-    // Preserve punctuation and hyphens as they carry semantic meaning for BERT/MiniLM
-    text = text.toLowerCase().replaceAllMapped(RegExp(r'([.,!?()-])'), (m) => ' ${m.group(1)} ');
-    final words = text.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
-
-    final tokenIds = <int>[_clsTokenId];
-    
-    for (var word in words) {
-      if (_vocab.containsKey(word)) {
-        tokenIds.add(_vocab[word]!);
-        continue;
-      }
-      
-      // WordPiece subtokenization
-      bool isBad = false;
-      int start = 0;
-      final subTokens = <int>[];
-      
-      while (start < word.length) {
-        int end = word.length;
-        String? curSubstr;
-        while (start < end) {
-          String sub = word.substring(start, end);
-          if (start > 0) sub = '##$sub';
-          if (_vocab.containsKey(sub)) {
-            curSubstr = sub;
-            break;
-          }
-          end--;
-        }
-        
-        if (curSubstr == null) {
-          isBad = true;
-          break;
-        }
-        subTokens.add(_vocab[curSubstr]!);
-        start = end;
-      }
-      
-      if (isBad) {
-        tokenIds.add(_unkTokenId);
-      } else {
-        tokenIds.addAll(subTokens);
-      }
-    }
-    
-    tokenIds.add(_sepTokenId);
-    
-    // Limit to max length
-    if (tokenIds.length > _maxLen) {
-      return tokenIds.sublist(0, _maxLen);
-    }
-    
-    return tokenIds;
+    debugPrint('🚀 [EmbeddingService] Heavy ONNX model loaded in ${sw.elapsedMilliseconds}ms');
   }
 
   Future<List<double>> embed(String text) async {
-    if (_session == null) await init();
+    // Cache check
+    if (_cache.containsKey(text)) return _cache[text]!;
+
+    await _ensureSession();
 
     final tokenIds = _tokenize(text);
     final seqLen = tokenIds.length;
     
-    if (text.length < 50) {
-      debugPrint('[Embed] Text: "${text.substring(0, text.length > 30 ? 30 : text.length)}..."');
-      debugPrint('[Embed] Tokens: ${tokenIds.take(15).toList()}');
-    }
-
     final inputIds = OrtValueTensor.createTensorWithDataList(Int64List.fromList(tokenIds), [1, seqLen]);
     final attentionMask = OrtValueTensor.createTensorWithDataList(Int64List.fromList(List.filled(seqLen, 1)), [1, seqLen]);
     final tokenTypeIds = OrtValueTensor.createTensorWithDataList(Int64List.fromList(List.filled(seqLen, 0)), [1, seqLen]);
@@ -132,13 +74,10 @@ class EmbeddingService {
     final outputs = _session!.run(runOptions, inputs);
     
     final outputValue = outputs[0]?.value;
-    if (outputValue == null) {
-      throw Exception('Model output is null');
-    }
+    if (outputValue == null) throw Exception('Model output is null');
 
     List<double> flattened;
     if (outputValue is List<List<List<double>>>) {
-      // Handle 3D output [1, seqLen, 384]
       flattened = outputValue[0].expand((e) => e).toList();
     } else if (outputValue is Float32List) {
       flattened = outputValue.toList();
@@ -146,7 +85,6 @@ class EmbeddingService {
       throw Exception('Unexpected model output type: ${outputValue.runtimeType}');
     }
 
-    // Mean pooling
     List<double> pooled = List.filled(384, 0.0);
     for (int i = 0; i < seqLen; i++) {
       for (int j = 0; j < 384; j++) {
@@ -161,21 +99,69 @@ class EmbeddingService {
     }
     norm = sqrt(norm);
     if (norm > 0) {
-      for (int j = 0; j < 384; j++) {
-        pooled[j] /= norm;
-      }
+      for (int j = 0; j < 384; j++) pooled[j] /= norm;
     }
     
-    // Cleanup
     inputIds.release();
     attentionMask.release();
     tokenTypeIds.release();
     runOptions.release();
-    for (var out in outputs) {
-      out?.release();
+    for (var out in outputs) out?.release();
+    
+    // Store in cache
+    _cache[text] = pooled;
+    return pooled;
+  }
+
+  List<int> _tokenize(String text) {
+    // 1. Basic cleaning and lowercase
+    final cleanText = text.toLowerCase().replaceAll(RegExp(r'[?.,!()]'), ' ');
+    final words = cleanText.split(RegExp(r'\s+'));
+    
+    List<int> ids = [_clsTokenId];
+    
+    for (var word in words) {
+      if (word.isEmpty) continue;
+      
+      // 2. WordPiece Greedy Maximum Matching
+      int start = 0;
+      while (start < word.length) {
+        int end = word.length;
+        String? bestSubword;
+        
+        while (start < end) {
+          String sub = word.substring(start, end);
+          // Subwords (not at the start of a word) in BERT/MiniLM vocab start with '##'
+          final vocabKey = (start == 0) ? sub : '##$sub';
+          
+          if (_vocab.containsKey(vocabKey)) {
+            bestSubword = vocabKey;
+            break;
+          }
+          end--;
+        }
+        
+        if (bestSubword == null) {
+          // If we can't find even a single character subword, use UNK for the whole word
+          ids.add(_unkTokenId);
+          break; 
+        } else {
+          ids.add(_vocab[bestSubword]!);
+          start = end;
+        }
+        
+        if (ids.length >= _maxLen - 1) break;
+      }
+      
+      if (ids.length >= _maxLen - 1) break;
     }
     
-    return pooled;
+    // 3. Finalize sequence
+    ids.add(_sepTokenId);
+    while (ids.length < _maxLen) {
+      ids.add(_padTokenId);
+    }
+    return ids;
   }
 
   Future<List<List<double>>> embedBatch(List<String> texts) async {

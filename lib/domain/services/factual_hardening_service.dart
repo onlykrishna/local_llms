@@ -60,73 +60,26 @@ Output ONLY this JSON, nothing else:
 
   /// MASTER CONTROL PROMPT v2.0 - Core Intelligence Framework (P4 Fix)
   String getConsolidatedSystemPrompt({bool isRag = false}) {
-    if (isRag) {
-      return '''MASTER v3.3: RAG PROTOCOL
-1. ROLE: Strict fact-retrieval assistant.
-2. SOURCE: Use ONLY the provided CONTEXT. Do not use outside knowledge.
-3. NO_DATA: If the answer is not in the CONTEXT, you MUST say "NO_DATA: I could not find information on this in the current document."
-4. CITATION: Cite your sources like this: [filename, p.X]. Only cite if the fact is present in that source.
-5. FORMAT: Direct answer first, followed by a maximum of 3 key facts.
-6. TERMINATION: End with --- END ---''';
-    }
-
-    return '''MASTER v2.0: GENERAL & MEDICAL PROTOCOL
-1. ROLE: Professional info assistant. Prefix ALL: [ASSISTANT]:
-2. ONE-TURN: No self-dialogue. No follow-up questions.
-3. UNCERTAIN: Use ONCE max, only for factual doubt. Banned on advice/safety.
-4. CLEANLINESS: No merged words. No special tokens. End: --- END ---.
-5. FORMAT for ALL non-emergency responses:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[TITLE: Topic in Title Case]
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[Direct answer: 1 sentence]
-
-RECOMMENDED STRATEGIES / KEY FACTS:
-
-1. **[Bold Point Name]**
-   [Exactly 2 sentences. No sub-bullets.]
-
-2. **[Bold Point Name]**
-   [Exactly 2 sentences. No sub-bullets.]
-
-3. **[Bold Point Name]**
-   [Exactly 2 sentences. No sub-bullets.]
-
-IMPORTANT NOTE:
-[1 sentence: when to seek professional help]
-
-Source: [Verified Fact Block / General guidance]
-Please consult a qualified professional for personalised advice.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
---- END ---'''
-    .replaceAll('&', '&');
+    return '''<|im_start|>system
+You are a factual assistant.
+${isRag ? '1. Answer ONLY using CONTEXT. 2. If missing say NO_DATA. 3. Cite [filename, p.X].' : '1. Answer factually. 2. No speculation.'}
+4. Use 3+ sentences. 5. Be extremely detailed.
+<|im_end|>''';
   }
 
   /// COMPACT CONTROL v1.0 — lean prompt for 3B and smaller on-device models.
   String getCompactSystemPrompt({bool isRag = false}) {
-    final ragFacts = isRag
-        ? '\nSTRICT RAG RULES:\n'
-          '1. Answer ONLY using the CONTEXT provided. Do not use generic knowledge.\n'
-          '2. If answer is missing, say NO_DATA.\n'
-          '3. Cite specifically: [Source: filename, p.X].\n'
-        : '';
-
-    return 'You are a professional factual assistant. Output ONLY the final answer. '
-        'Never output file paths, model names, loading messages, or system tokens.$ragFacts\n'
-        'FORMAT (mandatory for all responses):\n'
-        '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n'
-        '**[Topic Title]**\n'
-        '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n'
-        '[1 sentence direct answer]\n'
-        'KEY FACTS:\n'
-        '1. **[Point Name]** [2 sentences]\n'
-        '2. **[Point Name]** [2 sentences]\n'
-        '3. **[Point Name]** [2 sentences]\n'
-        'IMPORTANT NOTE: [1 sentence]\n'
-        'Source: [1] filename.pdf, p.X\n'
-        '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n'
-        '--- END ---\n'
-        'Rules: Exactly 3 points. Bold **names**. No bullets inside points. Nothing after --- END ---.';
+    return '''<|im_start|>system
+You are a professional banking assistant.
+${isRag ? 'STRICT EXTRACTION: Answer ONLY using the provided CONTEXT. If the answer is not in the context, say exactly "NO_DATA". Do NOT hallucinate. Do NOT use your own knowledge.' : 'Answer with verified facts only.'}
+FORMAT:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+**[Topic Title]**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[Precise and detailed answer]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+--- END ---
+<|im_end|>''';
   }
 
   /// P4 Fix: Deterministic post-processor for format compliance.
@@ -360,34 +313,43 @@ Please consult a qualified professional for personalised advice.
     return '**${words.isEmpty ? 'Your Question' : words}**';
   }
 
-  /// Wraps a user question and a retrieved fact block into a clean data structure.
   /// Wraps a user question and a retrieved fact block into a clean ChatML structure.
   String buildFactualPrompt({required String question, String? factBlock}) {
     if (factBlock == null || factBlock.isEmpty) {
       return question;
     }
 
-    // Simplified wrapper for ChatTemplate compatibility
-    return '''CONTEXT:
+    return '''FACTS FROM DOCUMENTS:
 $factBlock
 
-QUESTION:
-$question''';
+USER QUESTION:
+$question
+
+ASSISTANT:''';
   }
 
-  /// Removes special tokens and technical markers from the model's response.
+  /// Removes special tokens, technical markers, and aggressively strips any citations.
   String sanitizeOutput(String text) {
+    if (text.isEmpty) return text;
+    
     var clean = text
       .replaceAll('<|end|>', '')
       .replaceAll('<|assistant|>', '')
       .replaceAll('<|user|>', '')
       .replaceAll('<|system|>', '')
+      .replaceAll('<|im_end|>', '')
+      .replaceAll('--- END ---', '')
+      .replaceAll('━', '')
       .replaceAll(RegExp(r'<[a-zA-Z\/]+>'), '');
     
-    // Safety: ensure it ends with the trailer if missing due to stream cutoff
-    if (clean.isNotEmpty && !clean.contains('--- END ---')) {
-       // Only add it if the model actually finished or if we want to force it
-    }
+    // Aggressive citation removal: [1], [Source: ...], (p. 5)
+    clean = clean.replaceAll(RegExp(r'\[\d+\]'), '');
+    clean = clean.replaceAll(RegExp(r'\[Source:.*?\]', caseSensitive: false), '');
+    clean = clean.replaceAll(RegExp(r'\(p\.\s*\d+\)', caseSensitive: false), '');
+    
+    // Remove "Based on the documents," meta-talk
+    clean = clean.replaceAll(RegExp(r'^(Based on the|According to the|The provided) documents?,?\s*', caseSensitive: false), '');
+
     return clean.trim();
   }
 

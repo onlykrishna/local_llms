@@ -59,36 +59,41 @@ void main() async {
 }
 
 Future<void> _initServices() async {
+  final overallSw = Stopwatch()..start();
   try {
-    // These can run in parallel
+    // 1. Core Services (Parallel)
     await Future.wait([
-      Get.putAsync(() => SettingsService().init()).timeout(const Duration(seconds: 15)),
-      Get.putAsync(() => ModelDownloadService().init()).timeout(const Duration(seconds: 15)),
-      Get.putAsync(() => FallbackDatasetService().init()).timeout(const Duration(seconds: 15)),
-      Get.putAsync(() => DomainService().init()).timeout(const Duration(seconds: 15)),
+      Get.putAsync(() => SettingsService().init()),
+      Get.putAsync(() => ModelDownloadService().init()),
+      Get.putAsync(() => FallbackDatasetService().init()),
+      Get.putAsync(() => DomainService().init()),
+    ]).timeout(const Duration(seconds: 15));
+
+    // 2. Heavy I/O & Model Services (Parallel)
+    final docsDir = await getApplicationDocumentsDirectory();
+    final embeddingService = EmbeddingService();
+    
+    final results = await Future.wait([
+      openStore(directory: p.join(docsDir.path, "obx-rag")),
+      embeddingService.init(), // This is fast now due to deferred ONNX
+      Future.microtask(() => Get.put(FactualHardeningService())),
+      Future.microtask(() => Get.put(OnDeviceInferenceService())),
+      Future.microtask(() => Get.put(SourceCitationService())),
     ]);
 
-    // Init ObjectBox
-    final docsDir = await getApplicationDocumentsDirectory();
-    final store = await openStore(directory: p.join(docsDir.path, "obx-rag"));
+    final store = results[0] as Store;
     Get.put(store);
-
-    // Init RAG Services
-    final embeddingService = EmbeddingService();
-    await embeddingService.init();
     Get.put(embeddingService);
     
+    // 3. Dependent Services
     Get.put(DocumentIngestionService(store, embeddingService));
     Get.put(RagRetrievalService(store, embeddingService));
-    Get.put(SourceCitationService());
 
-    // These depend on the ones above
-    Get.put(FactualHardeningService());
-    Get.put(OnDeviceInferenceService());
+    // 4. Router & Controller
     await Get.putAsync(() => InferenceRouterService().init());
     Get.lazyPut(() => ModelManagerController());
     
-    debugPrint('✅ All services initialized in background');
+    debugPrint('🚀 All services initialized in ${overallSw.elapsedMilliseconds}ms');
   } catch (e) {
     debugPrint('🚨 Background Service Init Error: $e');
   }

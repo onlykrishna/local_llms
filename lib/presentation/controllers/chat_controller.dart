@@ -10,6 +10,8 @@ import '../../domain/services/expert_knowledge_base.dart';
 import '../../core/services/settings_service.dart';
 import '../../domain/models/inference_domain.dart';
 import '../../domain/source_citation_service.dart';
+import '../../domain/services/on_device_inference_service.dart';
+import '../../domain/services/factual_hardening_service.dart';
 
 enum MessageState { idle, thinking, streaming, cancelled, done, error }
 
@@ -18,7 +20,10 @@ class ChatController extends GetxController {
   final InferenceRouterService _router = Get.find<InferenceRouterService>();
   final DomainService _domainService = Get.find<DomainService>();
   final SettingsService _settings = Get.find<SettingsService>();
+  final RxString loadingStage = 'Ready'.obs;
   final SourceCitationService _citationService = Get.find<SourceCitationService>();
+  final OnDeviceInferenceService _inferenceService = Get.find<OnDeviceInferenceService>();
+  final FactualHardeningService _hardening = Get.find<FactualHardeningService>();
   final _uuid = const Uuid();
 
   // --- Reactive State -------------------------------------------------------
@@ -26,7 +31,8 @@ class ChatController extends GetxController {
   final RxBool isGenerating = false.obs;
   final Rx<MessageState> currentMessageState = MessageState.idle.obs;
   final RxString currentResponseText = ''.obs;
-  final RxBool isOllamaOnline = false.obs; 
+  final RxBool isOllamaOnline = false.obs;
+  final RxBool isModelInitializing = false.obs; 
 
   final TextEditingController inputController = TextEditingController();
   final ScrollController scrollController = ScrollController();
@@ -44,6 +50,13 @@ class ChatController extends GetxController {
     super.onInit();
     _loadHistory();
     _startOllamaStatusLoop();
+    
+    // Bind loading states from the inference service
+    loadingStage.value = _inferenceService.loadingStage.value;
+    ever(_inferenceService.loadingStage, (val) => loadingStage.value = val);
+    
+    isModelInitializing.value = _inferenceService.isLoading.value;
+    ever(_inferenceService.isLoading, (val) => isModelInitializing.value = val);
   }
 
   @override
@@ -69,6 +82,17 @@ class ChatController extends GetxController {
       return;
     }
 
+    if (!_inferenceService.isModelReady.value) {
+      // warmup() now handles concurrency internally and waits for any in-progress init
+      await _inferenceService.warmup();
+      
+      if (!_inferenceService.isModelReady.value) {
+        Get.snackbar('Engine Offline', 'Local engine failed to initialize. Please check model settings or retry.',
+            snackPosition: SnackPosition.BOTTOM, backgroundColor: Colors.redAccent, colorText: Colors.white);
+        return;
+      }
+    }
+
     // STEP 2: Intent Validation (Before Inference)
     final validation = _domainService.detectQueryDomain(text);
     if (!skipGuard && _settings.enableDomainValidation.value) {
@@ -84,13 +108,14 @@ class ChatController extends GetxController {
       await Future.delayed(const Duration(milliseconds: 150));
     }
 
-    // SCENARIO 3: Neural Expert Knowledge Base (Ground Truth Short-Circuit)
-    // If the query matches a high-profile entity, provide zero-latency expert answer.
+    // SCENARIO 3: Neural Expert Knowledge Base (Disabled per user request to prioritize RAG)
+    /*
     final expertAnswer = ExpertKnowledgeBase.probe(text, _domainService.selectedDomain.value);
     if (expertAnswer != null) {
         _handleExpertInterception(text, expertAnswer);
         return;
     }
+    */
 
     inputController.clear();
     final userMsg = ChatMessage(id: _uuid.v4(), content: text, isUser: true);
@@ -140,14 +165,21 @@ class ChatController extends GetxController {
         currentMessageState.value = MessageState.done;
         isGenerating.value = false;
         
-        String finalText = _responseBuffer.toString();
+        final rawText = _responseBuffer.toString();
+        // 1. Aggressive sanitization (remove [1], [Source: ...], etc.)
+        String finalText = _hardening.sanitizeOutput(rawText);
         
-        // v3.2: Programmatic Citations (Hardened)
-        if (_router.lastRetrievedChunks != null && _router.lastRetrievedChunks!.isNotEmpty) {
+        // 2. Programmatic Citations (Only if not already included in bypass)
+        final bool hasSourcesAlready = finalText.contains('**Sources**');
+        if (!hasSourcesAlready && _router.lastRetrievedChunks != null && _router.lastRetrievedChunks!.isNotEmpty) {
           final citations = _citationService.buildCitations(_router.lastRetrievedChunks!);
           if (citations.isNotEmpty) {
-             final citationText = citations.map((c) => '[${c.index}] ${c.fileName}, p.${c.pageNumber}').join('\n');
-             finalText = '$finalText\n\n$citationText';
+             final buffer = StringBuffer();
+             buffer.writeln('\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+             for (final c in citations) {
+                buffer.writeln('[${c.index}] ${c.fileName}, p.${c.pageNumber}');
+             }
+             finalText = '$finalText${buffer.toString()}';
           }
         }
 

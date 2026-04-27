@@ -20,8 +20,10 @@ class ChatPage extends GetView<ChatController> {
     return Scaffold(
       backgroundColor: Colors.transparent, // Background handled by parent (main.dart)
       resizeToAvoidBottomInset: true,
-      body: Column(
+      body: Stack(
         children: [
+          Column(
+            children: [
           const SizedBox(height: 100), // Spacing for transparent appbar
           const BackendStatusBar(),
           
@@ -57,6 +59,57 @@ class ChatPage extends GetView<ChatController> {
             }),
           ),
           _buildInputArea(context),
+            ],
+          ),
+          Obx(() {
+            if (controller.isModelInitializing.value) {
+              return Positioned(
+                top: 150,
+                left: 16,
+                right: 16,
+                child: Animate(
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: theme.colorScheme.primary.withOpacity(0.3)),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4)),
+                      ]
+                    ),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 20, 
+                          height: 20, 
+                          child: CircularProgressIndicator(strokeWidth: 2, color: theme.colorScheme.primary)
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Initializing local engine...',
+                                style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              const SizedBox(height: 4),
+                              Obx(() => Text(
+                                controller.loadingStage.value,
+                                style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.w500, fontSize: 12),
+                              )),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ).fadeIn(duration: 300.ms).slideY(begin: -0.2, end: 0),
+              );
+            }
+            return const SizedBox.shrink();
+          }),
         ],
       ),
     );

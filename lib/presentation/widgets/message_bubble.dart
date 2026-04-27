@@ -63,6 +63,11 @@ class MessageBubble extends StatelessWidget {
                                   fontSize: 15,
                                   height: 1.6,
                                 ),
+                                strong: TextStyle(
+                                  color: isMe ? Colors.white : theme.colorScheme.onSurface,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                ),
                                 code: TextStyle(
                                   backgroundColor: isMe ? Colors.black26 : theme.colorScheme.primary.withOpacity(0.1),
                                   fontFamily: 'monospace',
@@ -75,7 +80,12 @@ class MessageBubble extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            if (!isMe) ..._buildCitations(theme),
+                            // Suppress chip-based citations when the message already
+                            // has a structured **Sources** markdown block from the
+                            // direct-bypass path. parseCitations only matches [N] style
+                            // brackets which we no longer emit, so this is belt-and-suspenders.
+                            if (!isMe && !message.content.contains('**Sources**'))
+                              ..._buildCitations(theme),
                             const SizedBox(height: 6),
                             Text(
                               DateFormat('hh:mm').format(message.timestamp),
@@ -186,44 +196,41 @@ class _CitationChip extends StatelessWidget {
   final Citation citation;
   const _CitationChip({required this.citation});
 
+  String _shortName(String fileName) {
+    // Remove extension
+    final noExt = fileName.replaceAll('.pdf', '');
+    // Truncate to 15 chars
+    return noExt.length > 15
+        ? '${noExt.substring(0, 14)}…'
+        : noExt;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    
-    // Truncate filename if too long
-    String displayFile = citation.fileName;
-    if (displayFile.length > 18) {
-      displayFile = '${displayFile.substring(0, 10)}...${displayFile.substring(displayFile.length - 4)}';
-    }
-
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 160),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.primary.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: theme.colorScheme.primary.withOpacity(0.2)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.description_outlined, size: 12, color: theme.colorScheme.primary),
-            const SizedBox(width: 4),
-            Flexible(
-              child: Text(
-                '[${citation.index}] $displayFile (p.${citation.pageNumber})',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: theme.colorScheme.primary,
-                  fontWeight: FontWeight.w500,
-                ),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-              ),
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 150),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        color: Colors.white.withOpacity(0.08),
+        border: Border.all(color: Colors.white24, width: 0.5),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.article_outlined, size: 11, color: Colors.white60),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              _shortName(citation.fileName),
+              style: const TextStyle(fontSize: 11, color: Colors.white70),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
-          ],
-        ),
+          ),
+          Text(' p.${citation.pageNumber}',
+            style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.4))),
+        ],
       ),
     );
   }
