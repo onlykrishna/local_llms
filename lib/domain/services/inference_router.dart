@@ -190,8 +190,8 @@ class InferenceRouterService extends GetxService {
               // ── START DIRECT BYPASS (v4.0) ──────────────────────────────────
               // If keyword matching is extremely high, we return the fact directly.
               final topChunk = lastRetrievedChunks!.first;
-              final topScore = topChunk.score; // keyword coverage is part of the score now
-              final coverage = topChunk.score - (topChunk.score > 1.0 ? 1.0 : 0.0);
+              final topScore = topChunk.similarity; // keyword coverage is part of the similarity now
+              final coverage = topChunk.similarity - (topChunk.similarity > 1.0 ? 1.0 : 0.0);
 
               debugPrint('[RAG] Direct bypass check: coverage=$coverage hits=${lastRetrievedChunks?.length}');
 

@@ -169,14 +169,15 @@ class RagRetrievalService extends GetxService {
       int hits = queryWords.where((w) => chunkLower.contains(w)).length;
       
       if (hits > 0) {
-        // Score: 0.70 base + keyword coverage bonus (up to 0.25)
+        // Score: 1.0 offset + actual coverage (0.0 to 1.0)
+        // This allows inference_router to distinguish keyword matches from HNSW.
         final coverage = hits / queryWords.length;
-        final score = 0.70 + (coverage * 0.25);
+        final score = 1.0 + coverage;
         
         matches.add(RetrievedChunk(
           text: chunk.text,
           sourceLabel: chunk.sourceLabel,
-          similarity: score.clamp(0.0, 0.95),
+          similarity: score, // Range 1.0 to 2.0
           pageNumber: chunk.pageNumber,
           domain: chunk.domain,
         ));
