@@ -1,0 +1,84 @@
+Warning: Building for device with codesigning disabled. You will have to manually codesign before deploying to device.
+Building com.example.offlineAiFlutterDemo for device (ios-release)...
+Running Xcode build...                                          
+Xcode build done.                                           23.9s
+Failed to build iOS app
+Error output from Xcode build:
+↳
+    ** BUILD FAILED **
+
+
+Xcode's output:
+↳
+    Writing result bundle at path:
+    	/var/folders/dj/x_d31_7x697fbfk6fbb2fffh0000gn/T/flutter_tools.Bs7URX/flutter_ios_build_temp_dir9vpxTR/temporary_xcresult_bundle
+
+    lib/domain/services/model_download_service.dart:180:5: Error: The name of a constructor must match the name of the enclosing class.
+        _cancelTokens.remove(modelId);
+        ^^^^^^^^^^^^^
+    lib/domain/services/model_download_service.dart:240:1: Error: Expected a declaration, but got '}'.
+    }
+    ^
+    lib/main.dart:59:26: Error: Couldn't find constructor 'ModelDownloadService'.
+          Get.putAsync(() => ModelDownloadService().init()).timeout(const Duration(seconds: 15)),
+                             ^^^^^^^^^^^^^^^^^^^^
+    lib/domain/services/model_download_service.dart:184:5: Error: Undefined name '_cancelTokens'.
+        _cancelTokens[modelId]?.cancel('Paused by user');
+        ^^^^^^^^^^^^^
+    lib/domain/services/model_download_service.dart:188:11: Error: Method not found: 'startDownload'.
+        await startDownload(modelId);
+              ^^^^^^^^^^^^^
+    lib/domain/services/model_download_service.dart:192:5: Error: Undefined name '_cancelTokens'.
+        _cancelTokens[modelId]?.cancel('Cancelled');
+        ^^^^^^^^^^^^^
+    lib/domain/services/model_download_service.dart:201:5: Error: Undefined name '_progress'.
+        _progress[modelId] = ModelDownloadProgress.initial(modelId);
+        ^^^^^^^^^
+    lib/domain/services/model_download_service.dart:213:5: Error: Undefined name '_progress'.
+        _progress.remove(modelId);
+        ^^^^^^^^^
+    lib/domain/services/model_download_service.dart:217:12: Error: Undefined name '_progress'.
+        return _progress.values
+               ^^^^^^^^^
+    lib/presentation/controllers/model_manager_controller.dart:43:28: Error: The method 'pauseDownload' isn't defined for the type 'ModelDownloadService'.
+     - 'ModelDownloadService' is from 'package:offline_ai_flutter_demo/domain/services/model_download_service.dart' ('lib/domain/services/model_download_service.dart').
+    Try correcting the name to the name of an existing method, or defining a method named 'pauseDownload'.
+        await _downloadService.pauseDownload(modelId);
+                               ^^^^^^^^^^^^^
+    lib/presentation/controllers/model_manager_controller.dart:47:28: Error: The method 'resumeDownload' isn't defined for the type 'ModelDownloadService'.
+     - 'ModelDownloadService' is from 'package:offline_ai_flutter_demo/domain/services/model_download_service.dart' ('lib/domain/services/model_download_service.dart').
+    Try correcting the name to the name of an existing method, or defining a method named 'resumeDownload'.
+        await _downloadService.resumeDownload(modelId);
+                               ^^^^^^^^^^^^^^
+    lib/presentation/controllers/model_manager_controller.dart:51:28: Error: The method 'cancelDownload' isn't defined for the type 'ModelDownloadService'.
+     - 'ModelDownloadService' is from 'package:offline_ai_flutter_demo/domain/services/model_download_service.dart' ('lib/domain/services/model_download_service.dart').
+    Try correcting the name to the name of an existing method, or defining a method named 'cancelDownload'.
+        await _downloadService.cancelDownload(modelId);
+                               ^^^^^^^^^^^^^^
+    lib/presentation/controllers/model_manager_controller.dart:63:28: Error: The method 'deleteModel' isn't defined for the type 'ModelDownloadService'.
+     - 'ModelDownloadService' is from 'package:offline_ai_flutter_demo/domain/services/model_download_service.dart' ('lib/domain/services/model_download_service.dart').
+    Try correcting the name to the name of an existing method, or defining a method named 'deleteModel'.
+        await _downloadService.deleteModel(modelId);
+                               ^^^^^^^^^^^
+    Target kernel_snapshot_program failed: Exception
+    Failed to package /Users/aeologic/StudioProjects/offline_ai_flutter_demo.
+    Command PhaseScriptExecution failed with a nonzero exit code
+    note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'SDWebImage-SDWebImage' from project 'Pods')
+    note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'connectivity_plus-connectivity_plus_privacy' from project 'Pods')
+    note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'SwiftyGif-SwiftyGif' from project 'Pods')
+    note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'SDWebImage' from project 'Pods')
+    note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'connectivity_plus' from project 'Pods')
+    note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'SwiftyGif' from project 'Pods')
+    note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'DKPhotoGallery-DKPhotoGallery' from project 'Pods')
+    note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'DKPhotoGallery' from project 'Pods')
+    note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'DKImagePickerController-DKImagePickerController' from project 'Pods')
+    note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'DKImagePickerController' from project 'Pods')
+    note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'file_picker-file_picker_ios_privacy' from project 'Pods')
+    note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'file_picker' from project 'Pods')
+    note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'Pods-Runner' from project 'Pods')
+    note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'Runner' from project 'Runner')
+    note: Run script build phase 'Thin Binary' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'Runner' from project 'Runner')
+    note: Run script build phase 'Run Script' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'Runner' from project 'Runner')
+    note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'Flutter' from project 'Pods')
+
+Encountered error while building for device.

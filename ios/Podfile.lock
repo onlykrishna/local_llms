@@ -1,0 +1,101 @@
+PODS:
+  - connectivity_plus (0.0.1):
+    - Flutter
+  - DKImagePickerController/Core (4.3.9):
+    - DKImagePickerController/ImageDataManager
+    - DKImagePickerController/Resource
+  - DKImagePickerController/ImageDataManager (4.3.9)
+  - DKImagePickerController/PhotoGallery (4.3.9):
+    - DKImagePickerController/Core
+    - DKPhotoGallery
+  - DKImagePickerController/Resource (4.3.9)
+  - DKPhotoGallery (0.0.19):
+    - DKPhotoGallery/Core (= 0.0.19)
+    - DKPhotoGallery/Model (= 0.0.19)
+    - DKPhotoGallery/Preview (= 0.0.19)
+    - DKPhotoGallery/Resource (= 0.0.19)
+    - SDWebImage
+    - SwiftyGif
+  - DKPhotoGallery/Core (0.0.19):
+    - DKPhotoGallery/Model
+    - DKPhotoGallery/Preview
+    - SDWebImage
+    - SwiftyGif
+  - DKPhotoGallery/Model (0.0.19):
+    - SDWebImage
+    - SwiftyGif
+  - DKPhotoGallery/Preview (0.0.19):
+    - DKPhotoGallery/Model
+    - DKPhotoGallery/Resource
+    - SDWebImage
+    - SwiftyGif
+  - DKPhotoGallery/Resource (0.0.19):
+    - SDWebImage
+    - SwiftyGif
+  - file_picker (0.0.1):
+    - DKImagePickerController/PhotoGallery
+    - Flutter
+  - Flutter (1.0.0)
+  - ObjectBox (4.1.0)
+  - objectbox_flutter_libs (0.0.1):
+    - Flutter
+    - ObjectBox (= 4.1.0)
+  - onnxruntime (0.0.1):
+    - Flutter
+    - onnxruntime-objc (= 1.15.1)
+  - onnxruntime-c (1.15.1)
+  - onnxruntime-objc (1.15.1):
+    - onnxruntime-objc/Core (= 1.15.1)
+  - onnxruntime-objc/Core (1.15.1):
+    - onnxruntime-c (= 1.15.1)
+  - SDWebImage (5.21.7):
+    - SDWebImage/Core (= 5.21.7)
+  - SDWebImage/Core (5.21.7)
+  - SwiftyGif (5.4.5)
+
+DEPENDENCIES:
+  - connectivity_plus (from `.symlinks/plugins/connectivity_plus/ios`)
+  - file_picker (from `.symlinks/plugins/file_picker/ios`)
+  - Flutter (from `Flutter`)
+  - objectbox_flutter_libs (from `.symlinks/plugins/objectbox_flutter_libs/ios`)
+  - onnxruntime (from `.symlinks/plugins/onnxruntime/ios`)
+
+SPEC REPOS:
+  trunk:
+    - DKImagePickerController
+    - DKPhotoGallery
+    - ObjectBox
+    - onnxruntime-c
+    - onnxruntime-objc
+    - SDWebImage
+    - SwiftyGif
+
+EXTERNAL SOURCES:
+  connectivity_plus:
+    :path: ".symlinks/plugins/connectivity_plus/ios"
+  file_picker:
+    :path: ".symlinks/plugins/file_picker/ios"
+  Flutter:
+    :path: Flutter
+  objectbox_flutter_libs:
+    :path: ".symlinks/plugins/objectbox_flutter_libs/ios"
+  onnxruntime:
+    :path: ".symlinks/plugins/onnxruntime/ios"
+
+SPEC CHECKSUMS:
+  connectivity_plus: 2a701ffec2c0ae28a48cf7540e279787e77c447d
+  DKImagePickerController: 946cec48c7873164274ecc4624d19e3da4c1ef3c
+  DKPhotoGallery: b3834fecb755ee09a593d7c9e389d8b5d6deed60
+  file_picker: b159e0c068aef54932bb15dc9fd1571818edaf49
+  Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+  ObjectBox: bf3d4b51075d52868422d5d1f2f2141b1d630d30
+  objectbox_flutter_libs: 2f30755c12b0fe104d75445c3ba879e3072eda54
+  onnxruntime: e9346181d75b8dea8733bdae512a22c298962e00
+  onnxruntime-c: ebdcfd8650bcbd10121c125262f99dea681b92a3
+  onnxruntime-objc: ae7acec7a3d03eaf072d340afed7a35635c1c2a6
+  SDWebImage: e9fc87c1aab89a8ab1bbd74eba378c6f53be8abf
+  SwiftyGif: 706c60cf65fa2bc5ee0313beece843c8eb8194d4
+
+PODFILE CHECKSUM: f37261671e26701f0f45432152d03c00c8b9cc36
+
+COCOAPODS: 1.16.2

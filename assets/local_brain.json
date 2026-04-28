@@ -1,0 +1,44 @@
+{
+  "intents": [
+    {
+      "pattern": "(learn|how to|tutorial|guide).*(flutter|dart)",
+      "response": "To learn Flutter effectively, start with the Widget Tree concept. Master 'Stateless' vs 'Stateful' widgets. Then, move to 'State Management' (like GetX used here) and 'Clean Architecture'. Tips: 1. Build small projects. 2. Read official docs. 3. Study open-source repos like this one!",
+      "category": "Educational"
+    },
+    {
+      "pattern": "(what is|explain|tell me).*(flutter|framework)",
+      "response": "Flutter is Google's UI toolkit for crafting natively compiled applications for mobile, web, and desktop from a single codebase. It uses the Skia/Impeller rendering engine to achieve 60-120 FPS performance, bypassing the 'bridge' common in React Native.",
+      "category": "Definition"
+    },
+    {
+      "pattern": "(interview|questions|job).*(flutter|dart|mobile)",
+      "response": "Top Interview Questions:\n1. Difference between Stateless and Stateful widgets?\n2. What is an 'Element Tree' vs 'Widget Tree'?\n3. Explain 'Dependency Injection' (we use GetX for this).\n4. How does 'Hot Reload' work internally (via JIT)?",
+      "category": "Career"
+    },
+    {
+      "pattern": "(architecture|structure|clean).*(app|project)",
+      "response": "This app uses 'Clean Architecture'. It divides code into: 1. Domain (Rules/Entities), 2. Data (API/Database), 3. Presentation (UI/Controllers). Benefit: You can swap the AI backend (Ollama) with a Local Database without touching your UI code!",
+      "category": "Architecture"
+    },
+    {
+      "pattern": "(state|management|getx|bloc|provider)",
+      "response": "State management controls how your UI updates when data changes. In this app, we use GetX (reactive). It uses 'Rx' variables (like .obs) that automatically trigger UI updates only where needed, making the app extremely memory-efficient.",
+      "category": "Tech"
+    },
+    {
+      "pattern": "(offline|local|internet|no connection)",
+      "response": "Our app uses a 'Hybrid Intelligence' strategy. If the Ollama server is unreachable, it pivots to a High-Fidelity Local Knowledge Graph stored in Hive/JSON. This ensures you're never without critical information, even in airplane mode.",
+      "category": "System"
+    },
+    {
+      "pattern": "(error|fix|debug|problem|crash)",
+      "response": "Debugging tip: Always check 'logcat' (Android) or 'XCode console' (iOS). For Flutter, use 'Flutter DevTools' to inspect the widget tree and detect memory leaks. Make sure your dependencies are up-to-date in pubspec.yaml!",
+      "category": "Support"
+    }
+  ],
+  "placeholders": {
+    "greetings": ["Greetings! I'm your on-device intelligence module.", "Hi! Running in deep-local mode.", "Local Brain initialized. How can I help?"],
+    "thinking": ["Analyzing intent...", "Synthesizing response...", "Searching local knowledge graph...", "Optimizing output..."]
+  },
+  "default_fallback": "I'm analyzing your request in local mode. While I'm not connected to the full 7B model right now, I can provide deep insights into Flutter, AI Architecture, and Mobile Development. Try asking about those topics!"
+}
