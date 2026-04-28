@@ -19,7 +19,7 @@ class ChatMessage {
   final DateTime timestamp;
 
   @HiveField(4)
-  final bool isFromKb;
+  final bool? isFromKb;
 
   ChatMessage({
     required this.id,

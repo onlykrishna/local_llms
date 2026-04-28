@@ -20,7 +20,7 @@ class ChatMessageAdapter extends TypeAdapter<ChatMessage> {
       id: fields[0] as String,
       content: fields[1] as String,
       isUser: fields[2] as bool,
-      isFromKb: fields[4] as bool,
+      isFromKb: fields[4] as bool?,
       timestamp: fields[3] as DateTime?,
     );
   }

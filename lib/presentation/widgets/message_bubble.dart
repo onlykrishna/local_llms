@@ -76,7 +76,7 @@ class MessageBubble extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (message.isFromKb)
+                            if (message.isFromKb ?? false)
                               Container(
                                 margin: const EdgeInsets.only(bottom: 8),
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
