@@ -20,6 +20,7 @@ class ChatMessageAdapter extends TypeAdapter<ChatMessage> {
       id: fields[0] as String,
       content: fields[1] as String,
       isUser: fields[2] as bool,
+      isFromKb: fields[4] as bool,
       timestamp: fields[3] as DateTime?,
     );
   }
@@ -27,7 +28,7 @@ class ChatMessageAdapter extends TypeAdapter<ChatMessage> {
   @override
   void write(BinaryWriter writer, ChatMessage obj) {
     writer
-      ..writeByte(4)
+      ..writeByte(5)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -35,7 +36,9 @@ class ChatMessageAdapter extends TypeAdapter<ChatMessage> {
       ..writeByte(2)
       ..write(obj.isUser)
       ..writeByte(3)
-      ..write(obj.timestamp);
+      ..write(obj.timestamp)
+      ..writeByte(4)
+      ..write(obj.isFromKb);
   }
 
   @override
@@ -57,6 +60,7 @@ ChatMessage _$ChatMessageFromJson(Map<String, dynamic> json) => ChatMessage(
       id: json['id'] as String,
       content: json['content'] as String,
       isUser: json['isUser'] as bool,
+      isFromKb: json['isFromKb'] as bool? ?? false,
       timestamp: json['timestamp'] == null
           ? null
           : DateTime.parse(json['timestamp'] as String),
@@ -68,4 +72,5 @@ Map<String, dynamic> _$ChatMessageToJson(ChatMessage instance) =>
       'content': instance.content,
       'isUser': instance.isUser,
       'timestamp': instance.timestamp.toIso8601String(),
+      'isFromKb': instance.isFromKb,
     };

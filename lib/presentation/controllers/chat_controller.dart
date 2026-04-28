@@ -142,7 +142,12 @@ class ChatController extends GetxController {
           }
         }
 
-        final aiMsg = ChatMessage(id: placeholderId, content: finalText, isUser: false);
+        final aiMsg = ChatMessage(
+          id: placeholderId, 
+          content: finalText, 
+          isUser: false,
+          isFromKb: _router.lastIsFromKb,
+        );
         messages.insert(0, aiMsg);
         await _repository.saveMessage(aiMsg);
         currentResponseText.value = '';

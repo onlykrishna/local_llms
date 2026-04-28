@@ -9,6 +9,8 @@ import '../../core/services/settings_service.dart';
 import '../services/on_device_inference_service.dart';
 import '../rag_retrieval_service.dart';
 import '../entities/chat_message.dart';
+import '../hardcoded_kb_service.dart';
+import '../../data/hardcoded_kb.dart';
 
 enum InferenceBackend { ollama, onDevice }
 
@@ -21,8 +23,10 @@ class InferenceRouterService extends GetxService {
   
   /// Stores the most recently retrieved chunks for programmatic citation generation.
   List<RetrievedChunk>? lastRetrievedChunks;
+  bool lastIsFromKb = false;
 
   final _dio = Dio();
+  final _kbService = HardcodedKbService();
 
   CancelToken? _ollamaCancelToken;
   late SettingsService _settings;
@@ -48,6 +52,16 @@ class InferenceRouterService extends GetxService {
 
   Stream<String> probeAndRoute(String userMessage, List<ChatMessage> history) async* {
     debugPrint('[RAG] Probing: $userMessage');
+    lastIsFromKb = false;
+
+    // ── PRIORITY 0: Hardcoded KB lookup ──────────────────
+    final kbMatch = _kbService.lookup(userMessage);
+    if (kbMatch != null) {
+      debugPrint('[KB] Hardcoded match: ${kbMatch.source}');
+      lastIsFromKb = true;
+      yield '${kbMatch.answer}\n\n**Sources**\n\n1. ${kbMatch.source}';
+      return;
+    }
 
     // 1. SAFETY CHECK (Non-negotiable)
     final lowerMsg = userMessage.toLowerCase();

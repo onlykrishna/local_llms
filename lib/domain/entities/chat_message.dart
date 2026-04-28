@@ -18,10 +18,14 @@ class ChatMessage {
   @HiveField(3)
   final DateTime timestamp;
 
+  @HiveField(4)
+  final bool isFromKb;
+
   ChatMessage({
     required this.id,
     required this.content,
     required this.isUser,
+    this.isFromKb = false,
     DateTime? timestamp,
   }) : timestamp = timestamp ?? DateTime.now();
 
