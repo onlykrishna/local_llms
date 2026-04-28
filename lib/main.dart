@@ -10,9 +10,7 @@ import 'core/constants/app_constants.dart';
 import 'core/services/settings_service.dart';
 import 'core/services/fallback_dataset_service.dart';
 import 'domain/entities/chat_message.dart';
-import 'domain/services/domain_service.dart';
 import 'domain/services/on_device_inference_service.dart';
-import 'domain/services/factual_hardening_service.dart';
 import 'domain/services/inference_router.dart';
 import 'presentation/bindings/chat_binding.dart';
 import 'presentation/pages/chat_page.dart';
@@ -33,13 +31,11 @@ import 'package:path/path.dart' as p;
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // FEATURE 4: Lock orientation to Portrait only
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
 
-  // Initial core storage (fast)
   try {
     await GetStorage.init();
     await Hive.initFlutter();
@@ -52,7 +48,6 @@ void main() async {
     debugPrint('🚨 Storage Init Error: $e');
   }
 
-  // Start service initialization
   await _initServices();
 
   runApp(const OfflineAIDemoApp());
@@ -66,7 +61,6 @@ Future<void> _initServices() async {
       Get.putAsync(() => SettingsService().init()),
       Get.putAsync(() => ModelDownloadService().init()),
       Get.putAsync(() => FallbackDatasetService().init()),
-      Get.putAsync(() => DomainService().init()),
     ]).timeout(const Duration(seconds: 15));
 
     // 2. Heavy I/O & Model Services (Parallel)
@@ -75,8 +69,7 @@ Future<void> _initServices() async {
     
     final results = await Future.wait([
       openStore(directory: p.join(docsDir.path, "obx-rag")),
-      embeddingService.init(), // This is fast now due to deferred ONNX
-      Future.microtask(() => Get.put(FactualHardeningService())),
+      embeddingService.init(),
       Future.microtask(() => Get.put(OnDeviceInferenceService())),
       Future.microtask(() => Get.put(SourceCitationService())),
     ]);

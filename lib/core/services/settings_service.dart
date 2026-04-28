@@ -11,33 +11,32 @@ class SettingsService extends GetxService {
 
   final ollamaIp = '192.168.1.100'.obs;
   final ollamaPort = '11434'.obs;
-  final geminiApiKey = ''.obs;
   final isDarkMode = false.obs;
   final contextWindow = 10.obs;
   
   // Dynamic Model Scaling
   final selectedModelId = ''.obs; 
   final selectedModel = ''.obs; // Current GGUF path
-
-  final enableDomainValidation = true.obs;
+  final selectedDomain = 'Universal'.obs;
 
   Future<SettingsService> init() async {
     ollamaIp.value = _storage.read('ollama_ip') ?? '192.168.1.100';
     ollamaPort.value = _storage.read('ollama_port') ?? '11434';
-    
-    const envKey = String.fromEnvironment('GEMINI_KEY');
-    geminiApiKey.value = _storage.read('gemini_key') ?? envKey;
     
     isDarkMode.value = _storage.read('is_dark_mode') ?? false;
     contextWindow.value = _storage.read('context_window') ?? 10;
     
     selectedModelId.value = _storage.read('active_model_id') ?? 'qwen2_5_1_5b';
     selectedModel.value = await getActiveModelPath() ?? '';
-    
-    enableDomainValidation.value = _storage.read('enable_domain_validation') ?? true;
+    selectedDomain.value = _storage.read('selected_domain') ?? 'Universal';
     
     _applyTheme();
     return this;
+  }
+
+  void updateDomain(String domain) {
+    selectedDomain.value = domain;
+    _storage.write('selected_domain', domain);
   }
 
   void updateModel(String id) async {
@@ -79,11 +78,6 @@ class SettingsService extends GetxService {
     _storage.write('ollama_port', val);
   }
 
-  void updateGeminiKey(String val) {
-    geminiApiKey.value = val;
-    _storage.write('gemini_key', val);
-  }
-
   void toggleDarkMode(bool val) {
     isDarkMode.value = val;
     _storage.write('is_dark_mode', val);
@@ -93,11 +87,6 @@ class SettingsService extends GetxService {
   void updateContextWindow(int count) {
     contextWindow.value = count;
     _storage.write('context_window', count);
-  }
-
-  void updateDomainValidation(bool val) {
-    enableDomainValidation.value = val;
-    _storage.write('enable_domain_validation', val);
   }
 
   void _applyTheme() {

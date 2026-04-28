@@ -5,7 +5,6 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../controllers/chat_controller.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/typing_indicator.dart';
-import '../widgets/domain_selector.dart';
 import '../widgets/backend_status_bar.dart';
 
 class ChatPage extends GetView<ChatController> {
@@ -15,8 +14,6 @@ class ChatPage extends GetView<ChatController> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     
-    // ISSUE 1: Removed global GestureDetector as it interfered with drawer/navigation.
-    // Replaced with professional 'onTapOutside' on TextField (see _buildInputArea).
     return Scaffold(
       backgroundColor: Colors.transparent, // Background handled by parent (main.dart)
       resizeToAvoidBottomInset: true,
@@ -127,9 +124,8 @@ class ChatPage extends GetView<ChatController> {
       child: SafeArea(
         child: Column(
           children: [
-            const DomainSelector(),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
               child: Row(
                 children: [
                   Expanded(
@@ -146,7 +142,6 @@ class ChatPage extends GetView<ChatController> {
                         style: TextStyle(color: theme.colorScheme.onSurface),
                         textInputAction: TextInputAction.send,
                         onSubmitted: (_) => controller.sendMessage(),
-                        // FIX: Precise unfocus control that doesn't trigger when tapping functional UI elements
                         onTapOutside: (event) {
                           FocusManager.instance.primaryFocus?.unfocus();
                         },
@@ -171,7 +166,7 @@ class ChatPage extends GetView<ChatController> {
                         ? controller.stopGeneration
                         : controller.sendMessage,
                     child: Icon(
-                      controller.isGenerating.value
+                       controller.isGenerating.value
                           ? Icons.stop_rounded
                           : Icons.send_rounded,
                       color: theme.colorScheme.onPrimary,
@@ -263,7 +258,6 @@ class _EmptyChatView extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Premium Breathing 3D Node Representation
             Container(
               padding: const EdgeInsets.all(28),
               decoration: BoxDecoration(
@@ -285,7 +279,7 @@ class _EmptyChatView extends StatelessWidget {
             
             const SizedBox(height: 48),
             Text(
-              'Neutral Intelligence Ready',
+              'Grounded Intelligence Ready',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.w900,
@@ -298,7 +292,7 @@ class _EmptyChatView extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 56),
               child: Text(
-                'Select a domain node below to begin zero-latency local synthesis. All intelligence remains on-device.',
+                'Ask any question based on your uploaded documents. All intelligence remains strictly on-device.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14,
@@ -312,7 +306,6 @@ class _EmptyChatView extends StatelessWidget {
             _buildVerifiedQuestions(context),
 
             const SizedBox(height: 44),
-            // Subtle cue for the input area
             Icon(Icons.keyboard_arrow_down_rounded, color: theme.colorScheme.primary.withOpacity(0.3))
               .animate(onPlay: (c) => c.repeat())
               .move(duration: 800.ms, begin: const Offset(0, 0), end: const Offset(0, 10))
@@ -327,7 +320,6 @@ class _EmptyChatView extends StatelessWidget {
     final theme = Theme.of(context);
     final controller = Get.find<ChatController>();
 
-    // Helper: set text and immediately send so user gets an instant answer
     void ask(String question) {
       controller.inputController.text = question;
       controller.sendMessage();
@@ -336,7 +328,7 @@ class _EmptyChatView extends StatelessWidget {
     return Column(
       children: [
         Text(
-          'VERIFIED NEURAL ENTRY POINTS',
+          'DOCUMENT ENTRY POINTS',
           style: TextStyle(
             fontSize: 10,
             fontWeight: FontWeight.bold,
@@ -351,16 +343,16 @@ class _EmptyChatView extends StatelessWidget {
           alignment: WrapAlignment.center,
           children: [
             _QuestionChip(
-              label: 'Manage daily stress',
-              onTap: () => ask('What are three strategies to manage daily work stress?'),
+              label: 'Summarize Document',
+              onTap: () => ask('Provide a high-level summary of the uploaded document.'),
             ),
             _QuestionChip(
-              label: 'First Filmfare Awards',
-              onTap: () => ask('Who won Best Actor and Best Actress at the first Filmfare Awards in 1954?'),
+              label: 'Key Findings',
+              onTap: () => ask('What are the top 3 key findings or takeaways from this text?'),
             ),
             _QuestionChip(
-              label: 'Quantum Entanglement',
-              onTap: () => ask('Explain Quantum Entanglement simply for a high school student.'),
+              label: 'Verify Fact',
+              onTap: () => ask('Is there any mention of specific dates or milestones?'),
             ),
           ],
         ).animate().fadeIn(delay: 600.ms),

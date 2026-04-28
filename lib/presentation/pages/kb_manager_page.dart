@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../domain/document_ingestion_service.dart';
 import '../../domain/kb_domain.dart';
 import '../../data/source_document.dart';
@@ -78,9 +79,6 @@ class KbManagerController extends GetxController {
   }
 
   void deleteDocument(SourceDocument doc) {
-    // Note: To be fully correct, we should also delete chunks from chunkBox.
-    // Since chunkBox has a relation, ObjectBox handles this if configured,
-    // otherwise manual deletion:
     final chunkBox = store.box<DocumentChunk>();
     final query = chunkBox.query(DocumentChunk_.sourceDocId.equals(doc.id)).build();
     final chunkIds = query.findIds();
@@ -89,6 +87,36 @@ class KbManagerController extends GetxController {
 
     docBox.remove(doc.id);
     loadDocuments();
+  }
+
+  void clearAllData() {
+    Get.dialog(
+      AlertDialog(
+        title: const Text('Clear All Knowledge?'),
+        content: const Text('This will delete ALL documents and chunks across ALL domains. You will need to re-upload your PDFs.'),
+        actions: [
+          TextButton(onPressed: () => Get.back(), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () async {
+              try {
+                // 1. Clear boxes (Safer than closing store)
+                store.box<DocumentChunk>().removeAll();
+                store.box<SourceDocument>().removeAll();
+                
+                debugPrint('[KB] Boxes cleared. Count: ${store.box<DocumentChunk>().count()}');
+                
+                loadDocuments();
+                Get.back();
+                Get.snackbar('Database Cleared', 'All knowledge has been purged. You can now upload new documents.');
+              } catch (e) {
+                Get.snackbar('Error', 'Purge failed: $e');
+              }
+            },
+            child: const Text('Clear All', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -105,6 +133,13 @@ class KbManagerPage extends StatelessWidget {
         title: const Text('Knowledge Base'),
         backgroundColor: theme.scaffoldBackgroundColor,
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_sweep, color: Colors.redAccent),
+            tooltip: 'Clear All Data',
+            onPressed: controller.clearAllData,
+          ),
+        ],
       ),
       body: Column(
         children: [

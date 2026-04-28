@@ -7,7 +7,6 @@ import '../../data/repositories/chat_repository_impl.dart';
 import '../../domain/entities/chat_message.dart';
 import '../../domain/repositories/chat_repository.dart';
 import '../../domain/services/inference_router.dart';
-import '../../domain/services/domain_service.dart';
 import '../controllers/chat_controller.dart';
 import '../controllers/model_manager_controller.dart';
 import '../../core/constants/app_constants.dart';

@@ -23,24 +23,20 @@ class _SettingsPageState extends State<SettingsPage> {
 
   late TextEditingController ollamaIpCtrl;
   late TextEditingController ollamaPortCtrl;
-  late TextEditingController geminiKeyCtrl;
 
   final RxString connectionResult = ''.obs;
-  final RxBool obscureKey = true.obs;
 
   @override
   void initState() {
     super.initState();
     ollamaIpCtrl = TextEditingController(text: s.ollamaIp.value);
     ollamaPortCtrl = TextEditingController(text: s.ollamaPort.value);
-    geminiKeyCtrl = TextEditingController(text: s.geminiApiKey.value);
   }
 
   @override
   void dispose() {
     ollamaIpCtrl.dispose();
     ollamaPortCtrl.dispose();
-    geminiKeyCtrl.dispose();
     super.dispose();
   }
 
@@ -86,24 +82,6 @@ class _SettingsPageState extends State<SettingsPage> {
             
             const SizedBox(height: 20),
             _buildConnectionTester(theme),
-
-            const SizedBox(height: 40),
-            const _SectionHeader(title: 'GEMINI CLOUD'),
-            const SizedBox(height: 20),
-
-            Obx(() => _buildTextField(
-              context: context,
-              controller: geminiKeyCtrl,
-              label: 'Gemini API Key',
-              hint: 'Enter your AI Studio key',
-              icon: Icons.key_rounded,
-              obscureText: obscureKey.value,
-              suffix: IconButton(
-                icon: Icon(obscureKey.value ? Icons.visibility_off_rounded : Icons.visibility_rounded, size: 20, color: theme.colorScheme.onSurfaceVariant),
-                onPressed: () => obscureKey.toggle(),
-              ),
-              onChanged: s.updateGeminiKey,
-            )),
 
             const SizedBox(height: 40),
             const _SectionHeader(title: 'LOCAL COMPUTE'),

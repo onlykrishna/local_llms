@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../domain/services/inference_router.dart';
-import '../../domain/services/domain_service.dart';
-import '../../domain/models/inference_domain.dart';
 import '../../core/services/settings_service.dart';
 
 class BackendStatusBar extends StatelessWidget {
@@ -11,7 +9,6 @@ class BackendStatusBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final router = Get.find<InferenceRouterService>();
-    final domainService = Get.find<DomainService>();
     final theme = Theme.of(context);
 
     return Container(
@@ -20,7 +17,7 @@ class BackendStatusBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
         children: [
-          // Left: backend selector (FEATURE 3)
+          // Left: backend selector
           Obx(() {
             final backend = router.isManualMode.value 
                 ? router.manualBackend.value 
@@ -36,7 +33,6 @@ class BackendStatusBar extends StatelessWidget {
               },
               itemBuilder: (context) => [
                 _buildMenuItem(context, 'Auto Routing', Icons.auto_mode_rounded, Colors.grey, null, isAuto: true),
-                _buildMenuItem(context, 'Gemini Flash', Icons.cloud_rounded, Colors.green, InferenceBackend.gemini),
                 _buildMenuItem(context, 'Ollama LAN', Icons.lan_rounded, Colors.blue, InferenceBackend.ollama),
                 _buildMenuItem(context, 'On-device AI', Icons.memory_rounded, Colors.orange, InferenceBackend.onDevice),
               ],
@@ -77,38 +73,16 @@ class BackendStatusBar extends StatelessWidget {
 
           const Spacer(),
 
-          // Right: domain chip
-          Obx(() {
-            final domain = domainService.selectedDomain.value;
-            return Container(
-              height: 22,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              decoration: BoxDecoration(
-                color: _domainColor(domain).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: _domainColor(domain).withOpacity(0.25),
-                  width: 1,
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(_domainIcon(domain), size: 11, color: _domainColor(domain)),
-                  const SizedBox(width: 4),
-                  Text(
-                    domain.label,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      color: _domainColor(domain),
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
+          // Right: Status indicator
+          Text(
+            'STRICT GROUNDING ON',
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w900,
+              color: theme.colorScheme.onSurfaceVariant.withOpacity(0.4),
+              letterSpacing: 1.2,
+            ),
+          ),
         ],
       ),
     );
@@ -148,7 +122,6 @@ class BackendStatusBar extends StatelessWidget {
 
   Color _dotColor(InferenceBackend backend) {
     switch (backend) {
-      case InferenceBackend.gemini:   return Colors.green;
       case InferenceBackend.ollama:   return Colors.blue;
       case InferenceBackend.onDevice: return Colors.orange;
     }
@@ -156,29 +129,8 @@ class BackendStatusBar extends StatelessWidget {
 
   String _backendLabel(InferenceBackend backend, String currentLocalModel) {
     switch (backend) {
-      case InferenceBackend.gemini:   return 'Gemini AI';
       case InferenceBackend.ollama:   return 'Ollama LAN';
       case InferenceBackend.onDevice: return currentLocalModel;
-    }
-  }
-
-  Color _domainColor(InferenceDomain domain) {
-    switch (domain) {
-      case InferenceDomain.health:     return const Color(0xFFE53935);
-      case InferenceDomain.bollywood:  return const Color(0xFFF9A825);
-      case InferenceDomain.education:  return const Color(0xFF1565C0);
-      case InferenceDomain.banking:    return const Color(0xFF43A047);
-      case InferenceDomain.general:    return const Color(0xFF00695C);
-    }
-  }
-
-  IconData _domainIcon(InferenceDomain domain) {
-    switch (domain) {
-      case InferenceDomain.health:     return Icons.favorite_rounded;
-      case InferenceDomain.bollywood:  return Icons.movie_creation_rounded;
-      case InferenceDomain.education:  return Icons.school_rounded;
-      case InferenceDomain.banking:    return Icons.account_balance_rounded;
-      case InferenceDomain.general:    return Icons.chat_bubble_rounded;
     }
   }
 }

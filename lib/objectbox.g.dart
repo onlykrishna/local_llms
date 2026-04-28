@@ -23,7 +23,7 @@ final _entities = <obx_int.ModelEntity>[
   obx_int.ModelEntity(
       id: const obx_int.IdUid(1, 7884252392149657579),
       name: 'DocumentChunk',
-      lastPropertyId: const obx_int.IdUid(9, 5183210205534347653),
+      lastPropertyId: const obx_int.IdUid(11, 2160773126253542017),
       flags: 0,
       properties: <obx_int.ModelProperty>[
         obx_int.ModelProperty(
@@ -79,7 +79,18 @@ final _entities = <obx_int.ModelEntity>[
             id: const obx_int.IdUid(9, 5183210205534347653),
             name: 'createdAt',
             type: 10,
-            flags: 0)
+            flags: 0),
+        obx_int.ModelProperty(
+            id: const obx_int.IdUid(10, 2888542045005556236),
+            name: 'question',
+            type: 9,
+            flags: 0),
+        obx_int.ModelProperty(
+            id: const obx_int.IdUid(11, 2160773126253542017),
+            name: 'tags',
+            type: 9,
+            flags: 2048,
+            indexId: const obx_int.IdUid(4, 4824197016380174680))
       ],
       relations: <obx_int.ModelRelation>[],
       backlinks: <obx_int.ModelBacklink>[]),
@@ -175,7 +186,7 @@ obx_int.ModelDefinition getObjectBoxModel() {
   final model = obx_int.ModelInfo(
       entities: _entities,
       lastEntityId: const obx_int.IdUid(2, 4634653794525831309),
-      lastIndexId: const obx_int.IdUid(3, 485495152841239922),
+      lastIndexId: const obx_int.IdUid(4, 4824197016380174680),
       lastRelationId: const obx_int.IdUid(0, 0),
       lastSequenceId: const obx_int.IdUid(0, 0),
       retiredEntityUids: const [],
@@ -202,7 +213,10 @@ obx_int.ModelDefinition getObjectBoxModel() {
           final embeddingOffset = object.embedding == null
               ? null
               : fbb.writeListFloat32(object.embedding!);
-          fbb.startTable(10);
+          final questionOffset = fbb.writeString(object.question);
+          final tagsOffset =
+              object.tags == null ? null : fbb.writeString(object.tags!);
+          fbb.startTable(12);
           fbb.addInt64(0, object.id);
           fbb.addInt64(1, object.sourceDocId);
           fbb.addOffset(2, domainOffset);
@@ -212,6 +226,8 @@ obx_int.ModelDefinition getObjectBoxModel() {
           fbb.addOffset(6, sourceLabelOffset);
           fbb.addOffset(7, embeddingOffset);
           fbb.addInt64(8, object.createdAt.millisecondsSinceEpoch);
+          fbb.addOffset(9, questionOffset);
+          fbb.addOffset(10, tagsOffset);
           fbb.finish(fbb.endTable());
           return object.id;
         },
@@ -228,6 +244,8 @@ obx_int.ModelDefinition getObjectBoxModel() {
               const fb.Int64Reader().vTableGet(buffer, rootOffset, 10, 0);
           final pageNumberParam =
               const fb.Int64Reader().vTableGet(buffer, rootOffset, 12, 0);
+          final questionParam = const fb.StringReader(asciiOptimization: true)
+              .vTableGet(buffer, rootOffset, 22, '');
           final textParam = const fb.StringReader(asciiOptimization: true)
               .vTableGet(buffer, rootOffset, 14, '');
           final sourceLabelParam =
@@ -238,16 +256,20 @@ obx_int.ModelDefinition getObjectBoxModel() {
                   .vTableGetNullable(buffer, rootOffset, 18);
           final createdAtParam = DateTime.fromMillisecondsSinceEpoch(
               const fb.Int64Reader().vTableGet(buffer, rootOffset, 20, 0));
+          final tagsParam = const fb.StringReader(asciiOptimization: true)
+              .vTableGetNullable(buffer, rootOffset, 24);
           final object = DocumentChunk(
               id: idParam,
               sourceDocId: sourceDocIdParam,
               domain: domainParam,
               chunkIndex: chunkIndexParam,
               pageNumber: pageNumberParam,
+              question: questionParam,
               text: textParam,
               sourceLabel: sourceLabelParam,
               embedding: embeddingParam,
-              createdAt: createdAtParam);
+              createdAt: createdAtParam,
+              tags: tagsParam);
 
           return object;
         }),
@@ -357,6 +379,14 @@ class DocumentChunk_ {
   /// See [DocumentChunk.createdAt].
   static final createdAt =
       obx.QueryDateProperty<DocumentChunk>(_entities[0].properties[8]);
+
+  /// See [DocumentChunk.question].
+  static final question =
+      obx.QueryStringProperty<DocumentChunk>(_entities[0].properties[9]);
+
+  /// See [DocumentChunk.tags].
+  static final tags =
+      obx.QueryStringProperty<DocumentChunk>(_entities[0].properties[10]);
 }
 
 /// [SourceDocument] entity fields to define ObjectBox queries.

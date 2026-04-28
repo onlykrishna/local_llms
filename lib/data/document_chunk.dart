@@ -13,7 +13,13 @@ class DocumentChunk {
   
   int chunkIndex;
   int pageNumber;
+  
+  /// The FAQ question or header text (used for retrieval scoring)
+  String question;
+  
+  /// The actual answer or body text (used for LLM context)
   String text;
+  
   String sourceLabel;
   
   @HnswIndex(
@@ -28,15 +34,21 @@ class DocumentChunk {
   @Property(type: PropertyType.date)
   DateTime createdAt;
 
+  /// Comma-separated tags or acronyms for exact match boosting
+  @Index()
+  String? tags;
+
   DocumentChunk({
     this.id = 0,
     required this.sourceDocId,
     required this.domain,
     required this.chunkIndex,
     required this.pageNumber,
+    this.question = '',
     required this.text,
     required this.sourceLabel,
     this.embedding,
     required this.createdAt,
+    this.tags,
   });
 }

@@ -17,10 +17,31 @@ class MessageBubble extends StatelessWidget {
     this.animate = false,
   });
 
+  String _cleanAnswerText(String raw) {
+    // Remove everything after first markdown HR or citation
+    final cutPatterns = [
+      RegExp(r'\n[-—]{3,}'),           // --- or ———
+      RegExp(r'\n\[\d+\]'),            // [1], [2] etc
+      RegExp(r'\nSOURCES', caseSensitive: false),
+      RegExp(r'\nSources', caseSensitive: false),
+      RegExp(r'\n\*\*Sources\*\*', caseSensitive: false),
+    ];
+    
+    String result = raw;
+    for (final pattern in cutPatterns) {
+      final match = pattern.firstMatch(result);
+      if (match != null) {
+        result = result.substring(0, match.start).trim();
+      }
+    }
+    return result;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isMe = message.isUser;
+    final content = isMe ? message.content : _cleanAnswerText(message.content);
     
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -56,7 +77,7 @@ class MessageBubble extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             MarkdownBody(
-                              data: message.content,
+                              data: content,
                               styleSheet: MarkdownStyleSheet(
                                 p: TextStyle(
                                   color: isMe ? Colors.white : theme.colorScheme.onSurface,

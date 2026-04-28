@@ -1,38 +1,38 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:math';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
-import '../../data/datasources/gemini_datasource.dart';
 import '../../core/services/settings_service.dart';
-import '../services/domain_service.dart';
 import '../services/on_device_inference_service.dart';
-import '../services/factual_hardening_service.dart';
-import '../models/inference_domain.dart';
 import '../rag_retrieval_service.dart';
+import '../entities/chat_message.dart';
 
-enum InferenceBackend { ollama, gemini, onDevice }
+enum InferenceBackend { ollama, onDevice }
 
-/// Smart 3-layer Inference Router with Domain-Aware Prompting.
+/// Strict Document-Grounded Inference Router.
 class InferenceRouterService extends GetxService {
   final Rx<InferenceBackend> currentBackend = InferenceBackend.onDevice.obs;
   
   final RxBool isManualMode = false.obs;
-  final Rx<InferenceBackend> manualBackend = InferenceBackend.gemini.obs;
+  final Rx<InferenceBackend> manualBackend = InferenceBackend.onDevice.obs;
   
   /// Stores the most recently retrieved chunks for programmatic citation generation.
   List<RetrievedChunk>? lastRetrievedChunks;
 
-  final _gemini = GeminiDatasource();
   final _dio = Dio();
 
   CancelToken? _ollamaCancelToken;
   late SettingsService _settings;
   late OnDeviceInferenceService _onDevice;
+  late RagRetrievalService _retrieval;
 
   Future<InferenceRouterService> init() async {
     _settings = Get.find<SettingsService>();
     _onDevice = Get.find<OnDeviceInferenceService>();
+    _retrieval = Get.find<RagRetrievalService>();
     return this;
   }
 
@@ -46,39 +46,19 @@ class InferenceRouterService extends GetxService {
     isManualMode.value = false;
   }
 
-  static const Map<InferenceDomain, String> domainSystemPrompts = {
-     InferenceDomain.health: '''Medical Assist Only. Rules:
-1. SAFETY SCAN: If fever >= 103°F or 110°F, output ONLY: "⚠️ MEDICAL ALERT: A fever of [X] is a medical emergency. Go to the nearest emergency room immediately. Do not attempt home treatment." Stop.
-2. IF NOT EMERGENCY structure:
-- Likely meaning (1 sentence)
-- Action (2-3 bullets)
-- Doctor threshold (1 sentence)
-- Source: "Please verify with a licensed medical professional."''',
-     InferenceDomain.bollywood: 'Factual Bollywood historian. Provide specific names, dates, and awards. Avoid conversational filler and generic advice.',
-     InferenceDomain.education: 'Academic assistant. Explain concepts directly and objectively. No conversational padding or tutor-style fluff.',
-     InferenceDomain.banking: 'Banking and finance expert. Provide accurate information on banking procedures, financial regulations, and transaction security. Never ask for personal banking details.',
-     InferenceDomain.general: 'Precise assistant. Direct, objective info. No filler.'
-  };
+  Stream<String> probeAndRoute(String userMessage, List<ChatMessage> history) async* {
+    debugPrint('[RAG] Probing: $userMessage');
 
-  Stream<String> probeAndRoute({
-    required String userMessage,
-    InferenceDomain selectedDomain = InferenceDomain.general,
-    required List<Map<String, dynamic>> history,
-  }) async* {
-    // v3.1: All routing/classification is silent — no status messages yielded to UI
-
-    // 1. GLOBAL SAFETY OVERRIDE (Master v2.0 Section 2 — P1 Fix)
+    // 1. SAFETY CHECK (Non-negotiable)
     final lowerMsg = userMessage.toLowerCase();
     bool isEmergency = false;
 
-    // Explicit temperature threshold check
     final tempRegex = RegExp(r'(\d{2,3}(\.\d)?)\s*(f|c|fever|temp)');
     for (final m in tempRegex.allMatches(lowerMsg)) {
       double val = double.tryParse(m.group(1) ?? '0') ?? 0;
       if (val >= 103) isEmergency = true;
     }
 
-    // Explicit keyword triggers
     final exactKeywords = [
       'seizure', 'convulsion', 'unconscious', 'chest pain',
       'overdose', 'poisoning', 'self-harm', 'bleach', 'ammonia',
@@ -87,7 +67,6 @@ class InferenceRouterService extends GetxService {
     ];
     if (exactKeywords.any(lowerMsg.contains)) isEmergency = true;
 
-    // Fuzzy pattern triggers (P1 Fix)
     final fuzzyPatterns = [
       RegExp(r'burning up'),
       RegExp(r'very high temp'),
@@ -105,231 +84,103 @@ class InferenceRouterService extends GetxService {
       return;
     }
 
-    // 2. BACKEND RESOLUTION
+    final domainName = _settings.selectedDomain.value == 'Universal' 
+        ? null 
+        : _settings.selectedDomain.value;
+
+    // 2. EXECUTE THREE-TIER RETRIEVAL
+    final result = await _retrieval.retrieve(userMessage, domainName);
+
+    // 3. DECISION HANDLING
+    if (result.type == RetrievalResultType.noAnswer) {
+      yield 'No answer available.';
+      return;
+    }
+
+    if (result.type == RetrievalResultType.directBypass) {
+      debugPrint('[RAG] Result: DIRECT BYPASS');
+      debugPrint('[BYPASS] Returning text: "${result.content.substring(0, min(100, result.content.length))}"');
+      final sourcesText = result.sources
+          .asMap()
+          .entries
+          .map((e) => '${e.key + 1}. ${e.value}')
+          .join('\n');
+
+      yield '${result.content}\n\n**Sources**\n\n$sourcesText';
+      return;
+    }
+
+    // 4. LLM GROUNDED QA
+    debugPrint('[RAG] Result: LLM GROUNDED');
     final backend = await _resolveBackend();
     currentBackend.value = backend;
-    final hardening = Get.find<FactualHardeningService>();
-    final domainName = selectedDomain.name;
+
+    final ragContext = result.content;
+
+    final systemPrompt = '''
+Use only the text below to answer. Do not add any information.
+If the answer is not in the text, say: No answer available.
+
+TEXT:
+$ragContext
+''';
+
+    String fullLlmOutput = '';
 
     try {
       switch (backend) {
         case InferenceBackend.ollama:
-          final systemPrompt = hardening.getConsolidatedSystemPrompt();
-          yield* _streamOllama(userMessage, systemPrompt, history);
-          break;
-        case InferenceBackend.gemini:
-          final systemPrompt = hardening.getConsolidatedSystemPrompt();
-          yield* _gemini.streamChat(
-            apiKey: _settings.geminiApiKey.value,
-            userMessage: userMessage,
-            systemPrompt: systemPrompt,
-            history: history,
-          );
+          await for (final chunk in _streamOllama(userMessage, systemPrompt, history)) {
+            fullLlmOutput += chunk;
+          }
           break;
         case InferenceBackend.onDevice:
-          // v3.1: SILENT intent classification (Master Section 4)
-          String protocol = 'DIRECT';
-
-          // PRIORITY 2 — NEGATION TRAP (before FACT_BLOCK)
-          final negationPattern = RegExp(r'\b(not|never|wasn.?t|isn.?t|didn.?t|incorrect|wrong|not true|didn.?t happen)\b');
-          if (negationPattern.hasMatch(lowerMsg) && lowerMsg.contains('?')) {
-            protocol = 'NEGATION_TRAP';
-          // PRIORITY 3 — SPLITTER (fact + opinion)
-          } else if (RegExp(r'\b(best|worst|greatest|should|think|feel|believe|rating)\b').hasMatch(lowerMsg)
-              && RegExp(r'\b(won|award|year|date|who|how many)\b').hasMatch(lowerMsg)) {
-            protocol = 'SPLITTER';
-          // PRIORITY 4 — FACT_BLOCK: Filmfare awards OR Bollywood domain with specific fact query
-          } else if (lowerMsg.contains('filmfare') || lowerMsg.contains('awards') ||
-              (selectedDomain == InferenceDomain.bollywood &&
-               RegExp(r'\b(who|when|which|what year|born|debut|box office|highest|record|won|directed|produced|release)\b').hasMatch(lowerMsg))) {
-            protocol = 'FACT_BLOCK';
-          // PRIORITY 6 — DISGUISED FACTUAL
-          } else if (RegExp(r'^(tell me (about|something)|what do you know about|something about)').hasMatch(lowerMsg)) {
-            protocol = 'UNCERTAINTY_ANCHOR';
-          // PRIORITY 5 — DATE_SENTRY + UNCERTAINTY_ANCHOR
-          } else if (RegExp(r'\d{4}').hasMatch(userMessage)) {
-            protocol = 'UNCERTAINTY_ANCHOR';
+          await for (final chunk in _onDevice.respond(userMessage, systemPrompt, 'general')) {
+            if (chunk.contains('🔄')) continue;
+            fullLlmOutput += chunk;
           }
-          // Protocol assigned silently — not yielded to UI
-
-          // v3.1: Use compact prompt for on-device 3B models to prevent context overflow
-          final bool isRag = true; // Always attempt RAG for knowledge base
-          final systemPromptToUse = hardening.getCompactSystemPrompt(isRag: isRag);
-
-          String? factBlock;
-          
-          // First, try to retrieve dynamic facts from ObjectBox
-          try {
-            final ragService = Get.find<RagRetrievalService>();
-            // Use domain name if it matches KbDomain, otherwise null for global search
-            // Map InferenceDomain to KbDomain name strings
-            String? kbDomainName;
-            if (selectedDomain != InferenceDomain.general) {
-              kbDomainName = selectedDomain.name;
-            }
-            
-            lastRetrievedChunks = await ragService.retrieve(userMessage, kbDomainName, topK: 3);
-            debugPrint('[RAG] Domain: $kbDomainName, Found: ${lastRetrievedChunks?.length} chunks');
-            
-            if (lastRetrievedChunks != null && lastRetrievedChunks!.isNotEmpty) {
-              debugPrint('[RAG] Injecting fact block into prompt...');
-              final buffer = StringBuffer();
-              buffer.writeln('VERIFIED KNOWLEDGE BASE FACTS:');
-              
-              int totalContextChars = 0;
-              const int maxContextChars = 2000; // ~500-600 tokens
-
-              for (final chunk in lastRetrievedChunks!) {
-                 if (totalContextChars + chunk.text.length > maxContextChars) break;
-                 buffer.writeln('---');
-                 buffer.writeln('SOURCE: ${chunk.sourceLabel}');
-                 buffer.writeln('CONTENT: ${chunk.text}');
-                 totalContextChars += chunk.text.length;
-              }
-
-              // ── START DIRECT BYPASS (v4.0) ──────────────────────────────────
-              // If keyword matching is extremely high, we return the fact directly.
-              final topChunk = lastRetrievedChunks!.first;
-              final topScore = topChunk.similarity; // keyword coverage is part of the similarity now
-              final coverage = topChunk.similarity - (topChunk.similarity > 1.0 ? 1.0 : 0.0);
-
-              debugPrint('[RAG] Direct bypass check: coverage=$coverage hits=${lastRetrievedChunks?.length}');
-
-              if (coverage >= 0.4) {
-                debugPrint('[RAG] DIRECT BYPASS: Returning chunk text without LLM');
-
-                // ── Strip ALL question prefixes from chunk text ─────────────
-                String answerText = topChunk.text.trim();
-                
-                // Pattern: (Optional number) followed by (UPPER-CASE question text) and '?'
-                // We strip this pattern iteratively to handle merged chunks.
-                final qHeaderPattern = RegExp(r'^(\d{1,2}\.\s*)?([^a-z\n]+?\?\s*)', multiLine: true);
-                int safetyLimit = 5;
-                while (qHeaderPattern.hasMatch(answerText) && safetyLimit-- > 0) {
-                  final m = qHeaderPattern.firstMatch(answerText)!;
-                  answerText = answerText.substring(m.end).trim();
-                }
-
-                // ── Derive clean topic from the USER's question ────────────
-                String topic = userMessage
-                    .split(RegExp(r'[?!]'))[0]
-                    .trim()
-                    .replaceAll(RegExp(r'^(what is|what are|how does|how do|how|who can|who|when|why|do|does|can|is|are|for what)\s+', caseSensitive: false), '')
-                    .trim();
-                if (topic.isNotEmpty) {
-                  topic = topic[0].toUpperCase() + topic.substring(1);
-                }
-
-                // ── Build the sources list ────────────────────────────────
-                final sourcesText = lastRetrievedChunks!
-                    .asMap()
-                    .entries
-                    .map((e) => '${e.key + 1}. ${e.value.sourceLabel}')
-                    .join('\n');
-
-                // ── Emit structured markdown ──────────────────────────────
-                yield '**$topic**\n\n$answerText\n\n**Sources**\n\n$sourcesText';
-                return;
-              }
-              // ── END DIRECT BYPASS ─────────────────────────────────────────────
-              
-              buffer.writeln('\nRules for answering:');
-              buffer.writeln('1. Use ONLY the facts above.');
-              buffer.writeln('2. If the answer is not there, say "NO_DATA".');
-              buffer.writeln('3. Do NOT mention page numbers or filenames in your text.');
-              
-              factBlock = buffer.toString();
-            } else {
-              lastRetrievedChunks = null;
-              debugPrint('[RAG] No relevant context found.');
-            }
-          } catch (e) {
-            lastRetrievedChunks = null;
-            debugPrint('RAG Retrieval Error: $e');
-          }
-
-          // Fallback to static facts if nothing found dynamically
-          if (factBlock == null) {
-            // Do not use hardcoded filmfare facts anymore, keep it null so model knows there's no data or relies on general knowledge.
-          }
-
-          final finalUserPrompt = hardening.buildFactualPrompt(
-            question: userMessage,
-            factBlock: factBlock,
-          );
-
-          // v3.2: Yield chunks immediately for better UX. Do not buffer.
-          int meaningfulChunkCount = 0;
-          String? lastErrorChunk;
-
-          await for (final chunk in _onDevice.respond(finalUserPrompt, systemPromptToUse, domainName)) {
-            if (chunk.contains('⚠️') || chunk.contains('❌')) {
-              lastErrorChunk = chunk;
-              break;
-            }
-            
-            // Skip status indicators for meaningful count
-            if (chunk.contains('🔄')) {
-              yield chunk;
-              continue;
-            }
-
-            // Apply lightweight sanitization per chunk
-            String sanitized = chunk.replaceAll(RegExp(r'<[^>]*>'), ''); // basic tag stripping
-            
-            // ── Strip ALL question prefixes from chunk text ─────────────
-            String answerText = sanitized.trim();
-            // Pattern: (Optional number) followed by (UPPER-CASE question text) and '?'
-            // We strip this pattern iteratively to handle merged chunks.
-            final qHeaderPattern = RegExp(r'^(\d{1,2}\.\s*)?([^a-z\n]+?\?\s*)', multiLine: true);
-            int safetyLimit = 5;
-            while (qHeaderPattern.hasMatch(answerText) && safetyLimit-- > 0) {
-              final m = qHeaderPattern.firstMatch(answerText)!;
-              answerText = answerText.substring(m.end).trim();
-            }
-
-            if (answerText.isNotEmpty) {
-              yield answerText;
-              meaningfulChunkCount++;
-            }
-          }
-
-          // If model produced no content, explain why
-          if (meaningfulChunkCount == 0) {
-            if (lastErrorChunk != null) {
-              yield lastErrorChunk;
-            } else {
-              yield '❌ Model returned no response.\n\n'
-                  'Possible reasons:\n'
-                  '1. Context overflow — question was too long for available model memory.\n'
-                  '2. Model is still loading — please try again in a moment.\n'
-                  '3. Insufficient RAM — close other apps and retry.\n\n'
-                  'Try rephrasing your question more briefly.\n--- END ---';
-              return;
-            }
-          }
-          yield '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n--- END ---';
           break;
       }
+
+      final finalAnswer = _validateLlmResponse(fullLlmOutput, ragContext, userMessage);
+      
+      if (finalAnswer.contains('No answer available')) {
+        yield 'No answer available.';
+      } else {
+        final sourcesText = result.sources
+            .asMap()
+            .entries
+            .map((e) => '${e.key + 1}. ${e.value}')
+            .join('\n');
+            
+        yield '$finalAnswer\n\n**Sources**\n\n$sourcesText';
+      }
+
     } catch (e) {
       yield '❌ System Error: $e\n--- END ---';
     }
   }
 
-  /// STEP 4: Response Consistency Guardrails (Scenario 1)
-  bool validateResponseRelevance(String responseText, InferenceDomain domain) {
-    // Pass if general or if it's a known error status
-    if (domain == InferenceDomain.general) return true;
-    if (responseText.contains('⚠️') || responseText.contains('❌')) return true;
-    if (responseText.contains('⏳')) return true;
+  String _validateLlmResponse(String llmOutput, String ragContext, String query) {
+    final output = llmOutput.trim();
+    if (output.toLowerCase().contains('no answer available')) {
+      return 'No answer available.';
+    }
+    if (output.length > ragContext.length * 2.5) {
+      return _sanitizeChunk(ragContext.split('\n\n').first);
+    }
+    if (output.length < 5) {
+      return 'No answer available.';
+    }
+    return output;
+  }
 
-    final text = responseText.toLowerCase();
-
-    // Use keywords defined in DomainService
-    final domainKeywords = DomainService.domainKeywords[domain] ?? [];
-    if (domainKeywords.isEmpty) return true;
-
-    return domainKeywords.any(text.contains);
+  String _sanitizeChunk(String raw) {
+    String sanitized = raw.replaceAll(RegExp(r'^[A-Z\s\?\.\-\/]+\?\s*', multiLine: true), '');
+    sanitized = sanitized.replaceAll(RegExp(r'^\d+[\.\)]\s*', multiLine: true), '');
+    sanitized = sanitized.replaceAll(RegExp(r'[■●•▪︎➤]'), '');
+    sanitized = sanitized.replaceAll(RegExp(r'\n{3,}'), '\n\n').trim();
+    return sanitized;
   }
 
   Future<bool> _isOllamaReachable() async {
@@ -353,25 +204,17 @@ class InferenceRouterService extends GetxService {
     }
   }
 
-  Future<bool> _hasInternet() async {
-    final result = await Connectivity().checkConnectivity();
-    return result.isNotEmpty && !result.every((r) => r == ConnectivityResult.none);
-  }
-
   Future<InferenceBackend> _resolveBackend() async {
     if (isManualMode.value) return manualBackend.value;
     final ollamaReady = await _isOllamaReachable();
     if (ollamaReady) return InferenceBackend.ollama;
-    final hasInternet = await _hasInternet();
-    final hasGeminiKey = _settings.geminiApiKey.value.isNotEmpty;
-    if (hasInternet && hasGeminiKey) return InferenceBackend.gemini;
     return InferenceBackend.onDevice;
   }
 
   Stream<String> _streamOllama(
     String userMessage,
     String systemPrompt,
-    List<Map<String, dynamic>> history,
+    List<ChatMessage> history,
   ) async* {
     _ollamaCancelToken = CancelToken();
     final url = _settings.ollamaServerUrl;
@@ -380,8 +223,8 @@ class InferenceRouterService extends GetxService {
     final messages = <Map<String, dynamic>>[
       {'role': 'system', 'content': systemPrompt},
       ...history.map((m) => {
-        'role': m['isUser'] == true ? 'user' : 'assistant',
-        'content': m['content'],
+        'role': m.isUser == true ? 'user' : 'assistant',
+        'content': m.content,
       }),
       {'role': 'user', 'content': userMessage},
     ];
@@ -424,7 +267,6 @@ class InferenceRouterService extends GetxService {
   void cancelCurrentRequest() {
     _ollamaCancelToken?.cancel('Cancelled by user');
     _ollamaCancelToken = null;
-    _gemini.cancel();
     _onDevice.cancelInference();
   }
 }

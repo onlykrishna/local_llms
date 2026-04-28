@@ -75,7 +75,7 @@ class DocumentIngestionService extends GetxService {
         final end = (i + batchSize < totalChunks) ? i + batchSize : totalChunks;
         final batch = allChunks.sublist(i, end);
         
-        final textsToEmbed = batch.map((c) => c.text).toList();
+        final textsToEmbed = batch.map((c) => '${c.question} ${c.text}').toList();
         final List<List<double>> embeddings = await embeddingService.embedBatch(textsToEmbed);
         
         for (int j = 0; j < batch.length; j++) {
@@ -131,12 +131,35 @@ class DocumentIngestionService extends GetxService {
   }
 
   // Fix 3B: Aggressively clean chunks to remove similarity-poisoning noise
+  // Fix 3B: Aggressively clean chunks to remove similarity-poisoning noise
   static String _cleanChunkText(String text) {
     return text
         .replaceAll(RegExp(r'[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E6}-\u{1F1FF}]', unicode: true), '') // Emojis
         .replaceAll(RegExp(r'(FAQs|Terms & Conditions|Privacy Policy|Page \d+|Confidential)', caseSensitive: false), '') // Generic headers
         .replaceAll(RegExp(r'\s+'), ' ') // Normalize whitespace
         .trim();
+  }
+
+  static String? detectAcronymTag(String chunkText) {
+    // Pattern 1: "ACRONYM stands for" / "ACRONYM means"
+    final p1 = RegExp(
+      r'\b([A-Z]{2,5})\b[^.]{0,50}(?:stands for|means|refers to)',
+      caseSensitive: true,
+    );
+    
+    // Pattern 2: "Full Name (ACRONYM)" — parenthetical form
+    // e.g. "Loan to Value (LTV)", "Equated Monthly Instalment (EMI)"
+    final p2 = RegExp(
+      r'\b[A-Z][a-z]+(?:\s+[A-Za-z]+){1,4}\s+\(([A-Z]{2,5})\)',
+    );
+    
+    final m1 = p1.firstMatch(chunkText);
+    if (m1 != null) return m1.group(1)!.toLowerCase();
+    
+    final m2 = p2.firstMatch(chunkText);
+    if (m2 != null) return m2.group(1)!.toLowerCase();
+    
+    return null;
   }
 }
 
@@ -226,15 +249,35 @@ _ExtractionResult _extractAndChunkInIsolate(Map<String, dynamic> params) {
       final cleanChunkText = DocumentIngestionService._cleanChunkText(rawChunkText);
       if (cleanChunkText.length < 20) continue;
 
-      allChunks.add(DocumentChunk(
+      String question = '';
+      String answer = cleanChunkText;
+      
+      final qMarkIndex = cleanChunkText.indexOf('?');
+      if (qMarkIndex != -1 && qMarkIndex < cleanChunkText.length * 2) {
+        question = cleanChunkText.substring(0, qMarkIndex + 1).trim();
+        answer = cleanChunkText.substring(qMarkIndex + 1).trim();
+      } else {
+        final firstPeriod = cleanChunkText.indexOf('. ');
+        if (firstPeriod != -1 && firstPeriod < 100) {
+          question = cleanChunkText.substring(0, firstPeriod + 1).trim();
+          answer = cleanChunkText.substring(firstPeriod + 1).trim();
+        }
+      }
+
+      final tags = DocumentIngestionService.detectAcronymTag(answer);
+
+      final chunk = DocumentChunk(
         sourceDocId: docId,
         domain: domain,
         chunkIndex: chunkIndex++,
         pageNumber: i + 1,
-        text: cleanChunkText,
+        question: question,
+        text: answer,
         sourceLabel: '$fileName, p.${i + 1}',
         createdAt: DateTime.now(),
-      ));
+        tags: tags,
+      );
+      allChunks.add(chunk);
     }
   }
   document.dispose();
@@ -254,7 +297,6 @@ List<String> _splitIntoSentences(String text) {
     final wordsInSentence = cleanSentence.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
     final wordCountInSentence = wordsInSentence.length;
 
-    // Safety: If a single "sentence" is huge (e.g. no punctuation), split it by word count
     if (wordCountInSentence > 150) {
       if (buffer.isNotEmpty) {
         chunks.add(buffer.join(' '));
@@ -268,7 +310,6 @@ List<String> _splitIntoSentences(String text) {
       continue;
     }
 
-    // Fix 3A: Reduce target chunk size to 80 words for better discriminative search
     if (wordCount + wordCountInSentence > 80 && buffer.isNotEmpty) {
       chunks.add(buffer.join(' '));
       buffer.clear();
@@ -281,7 +322,7 @@ List<String> _splitIntoSentences(String text) {
 
   if (buffer.isNotEmpty) {
     final remaining = buffer.join(' ').trim();
-    if (remaining.length > 80) {
+    if (remaining.length > 20) {
       chunks.add(remaining);
     }
   }

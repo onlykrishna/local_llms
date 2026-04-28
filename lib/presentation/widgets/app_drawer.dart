@@ -3,11 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../core/services/settings_service.dart';
 import '../../domain/services/inference_router.dart';
-import '../../domain/services/domain_service.dart';
 import '../controllers/chat_controller.dart';
 import '../pages/history_page.dart';
 import '../pages/settings_page.dart';
-import '../pages/model_manager_page.dart';
 import '../pages/kb_manager_page.dart';
 
 class AppDrawer extends StatelessWidget {
@@ -18,7 +16,6 @@ class AppDrawer extends StatelessWidget {
     final settings = Get.find<SettingsService>();
     final controller = Get.find<ChatController>();
     final router = Get.find<InferenceRouterService>();
-    final domainService = Get.find<DomainService>();
     final theme = Theme.of(context);
 
     return Drawer(
@@ -35,16 +32,6 @@ class AppDrawer extends StatelessWidget {
                 Obx(() => _BackendStatusCard(backend: router.currentBackend.value)),
                 const SizedBox(height: 24),
                 
-                // _DrawerItem(
-                //   icon: Icons.memory_rounded,
-                //   label: 'AI Model Setup',
-                //   subtitle: 'Optimise GGUF parameters',
-                //   color: theme.colorScheme.primary,
-                //   onTap: () {
-                //     Get.back();
-                //     Get.to(() => const ModelManagerPage());
-                //   },
-                // ),
                 _DrawerItem(
                   icon: Icons.history_rounded,
                   label: 'Chat History',
@@ -58,7 +45,7 @@ class AppDrawer extends StatelessWidget {
                 _DrawerItem(
                   icon: Icons.library_books_rounded,
                   label: 'Knowledge Base',
-                  subtitle: 'Manage domain PDFs',
+                  subtitle: 'Manage document context',
                   color: theme.colorScheme.tertiary,
                   onTap: () {
                     Get.back();
@@ -97,7 +84,7 @@ class AppDrawer extends StatelessWidget {
             ),
           ),
           
-          _buildFooter(domainService, theme),
+          _buildFooter(theme),
         ],
       ),
     );
@@ -148,7 +135,7 @@ class AppDrawer extends StatelessWidget {
             ),
           ),
           Text(
-            '3-Layer Selective Inference',
+            'Grounded Document Assistant',
             style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12),
           ),
         ],
@@ -156,7 +143,7 @@ class AppDrawer extends StatelessWidget {
     );
   }
 
-  Widget _buildFooter(DomainService domainService, ThemeData theme) {
+  Widget _buildFooter(ThemeData theme) {
     return SafeArea(
       top: false,
       child: Padding(
@@ -164,17 +151,13 @@ class AppDrawer extends StatelessWidget {
         child: Column(
           children: [
             Text(
-              'v2.1.0-STABLE',
+              'v2.5.0-GROUNDED',
               style: TextStyle(color: theme.colorScheme.outlineVariant, fontSize: 10, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              alignment: WrapAlignment.center,
-              children: ['HEALTH', 'BOLLYWOOD', 'EDUCATION', 'GENERAL'].map((d) => Text(
-                d,
-                style: TextStyle(color: theme.colorScheme.onSurfaceVariant.withOpacity(0.4), fontSize: 9, letterSpacing: 1),
-              )).toList(),
+            Text(
+              'STRICT DOCUMENT-GROUNDED QA',
+              style: TextStyle(color: theme.colorScheme.onSurfaceVariant.withOpacity(0.4), fontSize: 9, letterSpacing: 1),
             ),
           ],
         ),
@@ -233,7 +216,6 @@ class _BackendStatusCard extends StatelessWidget {
 
   Color get _color {
     switch (backend) {
-      case InferenceBackend.gemini:   return const Color(0xFF00E475);
       case InferenceBackend.ollama:   return const Color(0xFF5D38BB);
       case InferenceBackend.onDevice: return const Color(0xFFFFB4AB);
     }
@@ -241,7 +223,6 @@ class _BackendStatusCard extends StatelessWidget {
 
   String _getLabel(String modelLabel) {
     switch (backend) {
-      case InferenceBackend.gemini:   return 'Gemini Flash';
       case InferenceBackend.ollama:   return 'Ollama LAN';
       case InferenceBackend.onDevice: return modelLabel;
     }
@@ -249,7 +230,6 @@ class _BackendStatusCard extends StatelessWidget {
 
   String _getSubtitle(InferenceBackend backend, String modelPath) {
     switch (backend) {
-      case InferenceBackend.gemini:   return 'Online · High precision';
       case InferenceBackend.ollama:   return 'Network · Private host';
       case InferenceBackend.onDevice: 
         final isPhi = modelPath.toLowerCase().contains('phi');
@@ -409,3 +389,6 @@ class _ThemeToggle extends StatelessWidget {
     );
   }
 }
+
+
+

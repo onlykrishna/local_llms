@@ -5,7 +5,7 @@
   "entities": [
     {
       "id": "1:7884252392149657579",
-      "lastPropertyId": "9:5183210205534347653",
+      "lastPropertyId": "11:2160773126253542017",
       "name": "DocumentChunk",
       "properties": [
         {
@@ -59,6 +59,18 @@
           "id": "9:5183210205534347653",
           "name": "createdAt",
           "type": 10
+        },
+        {
+          "id": "10:2888542045005556236",
+          "name": "question",
+          "type": 9
+        },
+        {
+          "id": "11:2160773126253542017",
+          "name": "tags",
+          "type": 9,
+          "flags": 2048,
+          "indexId": "4:4824197016380174680"
         }
       ],
       "relations": []
@@ -119,7 +131,7 @@
     }
   ],
   "lastEntityId": "2:4634653794525831309",
-  "lastIndexId": "3:485495152841239922",
+  "lastIndexId": "4:4824197016380174680",
   "lastRelationId": "0:0",
   "lastSequenceId": "0:0",
   "modelVersion": 5,
