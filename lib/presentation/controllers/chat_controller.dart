@@ -147,6 +147,7 @@ class ChatController extends GetxController {
           content: finalText, 
           isUser: false,
           isFromKb: _router.lastIsFromKb,
+          isSynthesized: _router.lastRequiresLlm,
         );
         messages.insert(0, aiMsg);
         await _repository.saveMessage(aiMsg);

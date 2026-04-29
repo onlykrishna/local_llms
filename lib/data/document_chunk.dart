@@ -38,6 +38,15 @@ class DocumentChunk {
   @Index()
   String? tags;
 
+  @Property()
+  bool isHardcoded = false;
+
+  @Property()
+  String? category;
+
+  @Index()
+  String? source;
+
   DocumentChunk({
     this.id = 0,
     required this.sourceDocId,
@@ -47,8 +56,11 @@ class DocumentChunk {
     this.question = '',
     required this.text,
     required this.sourceLabel,
+    this.source,
     this.embedding,
     required this.createdAt,
     this.tags,
+    this.isHardcoded = false,
+    this.category,
   });
 }

@@ -18,14 +18,14 @@ class Citation {
 }
 
 class SourceCitationService extends GetxService {
-  /// Builds citations from RetrievedChunk metadata directly.
-  List<Citation> buildCitations(List<RetrievedChunk> chunks) {
+  /// Builds citations from ScoredChunk metadata directly.
+  List<Citation> buildCitations(List<ScoredChunk> chunks) {
     return chunks.asMap().entries.map((e) {
       final i = e.key;
-      final c = e.value;
+      final c = e.value.chunk;
       return Citation(
         index: i + 1,
-        sourceLabel: c.sourceLabel, // already "filename, p.N"
+        sourceLabel: c.sourceLabel, 
         fileName: c.sourceLabel.split(',').first.trim(),
         pageNumber: c.pageNumber.toString(),
         domain: c.domain,

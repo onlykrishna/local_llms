@@ -18,23 +18,24 @@ class MessageBubble extends StatelessWidget {
   });
 
   String _cleanAnswerText(String raw) {
-    // Remove everything after first markdown HR or citation
-    final cutPatterns = [
-      RegExp(r'\n[-—]{3,}'),           // --- or ———
-      RegExp(r'\n\[\d+\]'),            // [1], [2] etc
-      RegExp(r'\nSOURCES', caseSensitive: false),
-      RegExp(r'\nSources', caseSensitive: false),
-      RegExp(r'\n\*\*Sources\*\*', caseSensitive: false),
-    ];
-    
     String result = raw;
-    for (final pattern in cutPatterns) {
-      final match = pattern.firstMatch(result);
-      if (match != null) {
-        result = result.substring(0, match.start).trim();
-      }
-    }
-    return result;
+    
+    // 1. Strip citation markers [1], [2]
+    result = result.replaceAll(RegExp(r'\[\d+\]'), '');
+    
+    // 2. Strip horizontal rules
+    result = result.replaceAll(RegExp(r'[-━─]{3,}'), '');
+    
+    // 3. Strip leaked INSTRUCTION/CONTEXT prompts
+    result = result.replaceAll(
+        RegExp(r'INSTRUCTION:.*', caseSensitive: false), '');
+    result = result.replaceAll(
+        RegExp(r'CONTEXT:.*', caseSensitive: false), '');
+    
+    // 6. Collapse excess newlines
+    result = result.replaceAll(RegExp(r'\n{3,}'), '\n\n');
+    
+    return result.trim();
   }
 
   @override
@@ -76,32 +77,60 @@ class MessageBubble extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (message.isFromKb ?? false)
-                              Container(
-                                margin: const EdgeInsets.only(bottom: 8),
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: theme.colorScheme.primary.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(color: theme.colorScheme.primary.withOpacity(0.2)),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.verified_user_rounded, size: 10, color: theme.colorScheme.primary),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      'From Knowledge Base',
-                                      style: TextStyle(
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.bold,
-                                        color: theme.colorScheme.primary,
-                                        letterSpacing: 0.5,
+                            if (!isMe) ...[
+                              if (message.isFromKb ?? false)
+                                Container(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF2ECC71).withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: const Color(0xFF2ECC71).withOpacity(0.4)),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.verified_rounded, size: 10, color: Color(0xFF2ECC71)),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Verified Ground Truth',
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF2ECC71),
+                                          letterSpacing: 0.5,
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
+                                )
+                              else if (message.isSynthesized ?? false)
+                                Container(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: theme.colorScheme.primary.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: theme.colorScheme.primary.withOpacity(0.2)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.auto_awesome, size: 10, color: theme.colorScheme.primary),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'AI Synthesized',
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.bold,
+                                          color: theme.colorScheme.primary,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
+                            ],
                             MarkdownBody(
                               data: content,
                               styleSheet: MarkdownStyleSheet(

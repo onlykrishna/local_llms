@@ -6,7 +6,7 @@ import 'package:syncfusion_flutter_pdf/pdf.dart';
 import '../core/embedding_service.dart';
 import '../data/document_chunk.dart';
 import '../data/source_document.dart';
-import '../domain/kb_domain.dart';
+import 'kb_domain.dart';
 import '../objectbox.g.dart'; // From build_runner
 
 class DocumentIngestionService extends GetxService {
@@ -274,6 +274,7 @@ _ExtractionResult _extractAndChunkInIsolate(Map<String, dynamic> params) {
         question: question,
         text: answer,
         sourceLabel: '$fileName, p.${i + 1}',
+        source: fileName,
         createdAt: DateTime.now(),
         tags: tags,
       );

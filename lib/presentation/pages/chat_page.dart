@@ -6,6 +6,8 @@ import '../controllers/chat_controller.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/typing_indicator.dart';
 import '../widgets/backend_status_bar.dart';
+import '../../domain/kb_embedding_service.dart';
+import '../../domain/services/inference_router.dart';
 
 class ChatPage extends GetView<ChatController> {
   const ChatPage({super.key});
@@ -15,49 +17,51 @@ class ChatPage extends GetView<ChatController> {
     final theme = Theme.of(context);
     
     return Scaffold(
-      backgroundColor: Colors.transparent, // Background handled by parent (main.dart)
+      backgroundColor: Colors.transparent, 
       resizeToAvoidBottomInset: true,
       body: Stack(
         children: [
           Column(
             children: [
-          const SizedBox(height: 100), // Spacing for transparent appbar
-          const BackendStatusBar(),
-          
-          Expanded(
-            child: Obx(() {
-              if (controller.messages.isEmpty && !controller.isGenerating.value) {
-                return const _EmptyChatView();
-              }
-              return ListView.builder(
-                controller: controller.scrollController,
-                reverse: true, 
-                physics: const BouncingScrollPhysics(),
-                itemCount: controller.messages.length + (controller.isGenerating.value ? 1 : 0),
-                padding: const EdgeInsets.only(bottom: 24, top: 12),
-                itemBuilder: (context, index) {
-                  if (index == 0 && controller.isGenerating.value) {
-                    if (controller.currentResponseText.value.isEmpty) {
-                      return Animate(child: const TypingIndicator())
-                          .fadeIn(duration: 400.ms)
-                          .slideY(begin: 0.1, end: 0);
-                    } else {
-                      return Animate(child: _StreamingBubble(controller: controller))
-                          .fadeIn(duration: 300.ms);
-                    }
+              const SizedBox(height: 100), 
+              const BackendStatusBar(),
+              _buildKbStatusBar(), // KB Status Panel
+              
+              Expanded(
+                child: Obx(() {
+                  if (controller.messages.isEmpty && !controller.isGenerating.value) {
+                    return const _EmptyChatView();
                   }
-                  final msgIndex = controller.isGenerating.value ? index - 1 : index;
-                  final msg = controller.messages[msgIndex];
-                  return Animate(child: MessageBubble(message: msg))
-                      .fadeIn(duration: 400.ms)
-                      .slideX(begin: msg.isUser ? 0.05 : -0.05, end: 0);
-                },
-              );
-            }),
-          ),
-          _buildInputArea(context),
+                  return ListView.builder(
+                    controller: controller.scrollController,
+                    reverse: true, 
+                    physics: const BouncingScrollPhysics(),
+                    itemCount: controller.messages.length + (controller.isGenerating.value ? 1 : 0),
+                    padding: const EdgeInsets.only(bottom: 24, top: 12),
+                    itemBuilder: (context, index) {
+                      if (index == 0 && controller.isGenerating.value) {
+                        if (controller.currentResponseText.value.isEmpty) {
+                          return Animate(child: const TypingIndicator())
+                              .fadeIn(duration: 400.ms)
+                              .slideY(begin: 0.1, end: 0);
+                        } else {
+                          return Animate(child: _StreamingBubble(controller: controller))
+                              .fadeIn(duration: 300.ms);
+                        }
+                      }
+                      final msgIndex = controller.isGenerating.value ? index - 1 : index;
+                      final msg = controller.messages[msgIndex];
+                      return Animate(child: MessageBubble(message: msg))
+                          .fadeIn(duration: 400.ms)
+                          .slideX(begin: msg.isUser ? 0.05 : -0.05, end: 0);
+                    },
+                  );
+                }),
+              ),
+              _buildInputArea(context),
             ],
           ),
+          // Initialization overlay
           Obx(() {
             if (controller.isModelInitializing.value) {
               return Positioned(
@@ -112,66 +116,167 @@ class ChatPage extends GetView<ChatController> {
     );
   }
 
+  Widget _buildKbStatusBar() {
+    final kbService = Get.find<KbEmbeddingService>();
+    return StreamBuilder<KbInitStatus>(
+      stream: kbService.statusStream,
+      builder: (context, snapshot) {
+        final status = snapshot.data;
+        if (status == null) return const SizedBox.shrink();
+
+        switch (status.stage) {
+          case KbInitStage.loading:
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.purple.withOpacity(0.15),
+                border: Border(bottom: BorderSide(color: Colors.purple.withOpacity(0.3))),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    const SizedBox(
+                      width: 12, height: 12,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF9B59B6)),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(status.message, style: const TextStyle(color: Colors.white70, fontSize: 11, fontFamily: 'Inter')),
+                  ]),
+                  const SizedBox(height: 4),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(2),
+                    child: LinearProgressIndicator(
+                      value: status.progress,
+                      backgroundColor: Colors.white10,
+                      valueColor: const AlwaysStoppedAnimation(Color(0xFF9B59B6)),
+                      minHeight: 2,
+                    ),
+                  ),
+                  if (status.currentEntry != null) ...[
+                    const SizedBox(height: 2),
+                    Text(status.currentEntry!, style: const TextStyle(color: Colors.white38, fontSize: 9, fontFamily: 'Inter', overflow: TextOverflow.ellipsis), maxLines: 1),
+                  ],
+                ],
+              ),
+            );
+          case KbInitStage.ready:
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              child: Row(children: [
+                const Icon(Icons.check_circle_outline, size: 12, color: Color(0xFF2ECC71)),
+                const SizedBox(width: 6),
+                Text(status.message, style: const TextStyle(color: Color(0xFF2ECC71), fontSize: 10, fontFamily: 'Inter')),
+              ]),
+            );
+          case KbInitStage.error:
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              child: Row(children: [
+                const Icon(Icons.error_outline, size: 12, color: Colors.redAccent),
+                const SizedBox(width: 6),
+                Text(status.message, style: const TextStyle(color: Colors.redAccent, fontSize: 10)),
+              ]),
+            );
+        }
+      },
+    );
+  }
+
+  Widget _buildQueryStatusIndicator() {
+    final router = Get.find<InferenceRouterService>();
+    return StreamBuilder<QueryStatus>(
+      stream: router.queryStatusStream,
+      builder: (context, snapshot) {
+        final status = snapshot.data;
+        if (status == null || status.stage == QueryStage.done) {
+          return const SizedBox.shrink();
+        }
+
+        final icon = switch (status.stage) {
+          QueryStage.expanding  => Icons.manage_search,
+          QueryStage.embedding  => Icons.bubble_chart,
+          QueryStage.searching  => Icons.travel_explore,
+          QueryStage.reranking  => Icons.sort,
+          QueryStage.generating => Icons.psychology,
+          QueryStage.done       => Icons.check,
+        };
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Row(children: [
+            const _PulsingDot(color: Color(0xFF9B59B6)),
+            const SizedBox(width: 10),
+            Icon(icon, size: 14, color: Colors.purpleAccent),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(status.message, style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
+                  if (status.detail != null)
+                    Text(status.detail!, style: const TextStyle(color: Colors.white38, fontSize: 10)),
+                ],
+              ),
+            ),
+          ]),
+        );
+      },
+    );
+  }
+
   Widget _buildInputArea(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
-        border: Border(
-          top: BorderSide(color: theme.colorScheme.outline.withOpacity(0.2)),
-        ),
+        border: Border(top: BorderSide(color: theme.colorScheme.outline.withOpacity(0.2))),
       ),
       child: SafeArea(
         child: Column(
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-              child: Row(
+              child: Column(
                 children: [
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surfaceContainer,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: theme.colorScheme.outline.withOpacity(0.5)),
-                      ),
-                      child: TextField(
-                        controller: controller.inputController,
-                        maxLines: 4,
-                        minLines: 1,
-                        style: TextStyle(color: theme.colorScheme.onSurface),
-                        textInputAction: TextInputAction.send,
-                        onSubmitted: (_) => controller.sendMessage(),
-                        onTapOutside: (event) {
-                          FocusManager.instance.primaryFocus?.unfocus();
-                        },
-                        decoration: InputDecoration(
-                          hintText: 'Synthesizing with local knowledge...',
-                          hintStyle: TextStyle(color: theme.colorScheme.onSurfaceVariant.withOpacity(0.5), fontSize: 13),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          border: InputBorder.none,
-                          filled: false,
+                  _buildQueryStatusIndicator(),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surfaceContainer,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: theme.colorScheme.outline.withOpacity(0.5)),
+                          ),
+                          child: TextField(
+                            controller: controller.inputController,
+                            maxLines: 4,
+                            minLines: 1,
+                            style: TextStyle(color: theme.colorScheme.onSurface),
+                            textInputAction: TextInputAction.send,
+                            onSubmitted: (_) => controller.sendMessage(),
+                            decoration: InputDecoration(
+                              hintText: 'Synthesizing with local knowledge...',
+                              hintStyle: TextStyle(color: theme.colorScheme.onSurfaceVariant.withOpacity(0.5), fontSize: 13),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              border: InputBorder.none,
+                              filled: false,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                      const SizedBox(width: 12),
+                      Obx(() => FloatingActionButton(
+                        heroTag: 'chat_send_btn',
+                        mini: true,
+                        backgroundColor: controller.isGenerating.value ? theme.colorScheme.error : theme.colorScheme.primary,
+                        onPressed: controller.isGenerating.value ? controller.stopGeneration : controller.sendMessage,
+                        child: Icon(controller.isGenerating.value ? Icons.stop_rounded : Icons.send_rounded, color: theme.colorScheme.onPrimary),
+                      )),
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                  Obx(() => FloatingActionButton(
-                    heroTag: 'chat_send_btn',
-                    mini: true,
-                    backgroundColor: controller.isGenerating.value
-                        ? theme.colorScheme.error
-                        : theme.colorScheme.primary,
-                    onPressed: controller.isGenerating.value
-                        ? controller.stopGeneration
-                        : controller.sendMessage,
-                    child: Icon(
-                       controller.isGenerating.value
-                          ? Icons.stop_rounded
-                          : Icons.send_rounded,
-                      color: theme.colorScheme.onPrimary,
-                    ),
-                  )),
                 ],
               ),
             ),
@@ -180,6 +285,36 @@ class ChatPage extends GetView<ChatController> {
       ),
     );
   }
+}
+
+class _PulsingDot extends StatefulWidget {
+  final Color color;
+  const _PulsingDot({required this.color});
+  @override
+  State<_PulsingDot> createState() => _PulsingDotState();
+}
+
+class _PulsingDotState extends State<_PulsingDot> with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _anim;
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(duration: const Duration(milliseconds: 900), vsync: this)..repeat(reverse: true);
+    _anim = Tween<double>(begin: 0.3, end: 1.0).animate(_ctrl);
+  }
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _anim,
+      child: Container(
+        width: 8, height: 8,
+        decoration: BoxDecoration(color: widget.color, shape: BoxShape.circle, boxShadow: [BoxShadow(color: widget.color.withOpacity(0.6), blurRadius: 6, spreadRadius: 2)]),
+      ),
+    );
+  }
+  @override
+  void dispose() { _ctrl.dispose(); super.dispose(); }
 }
 
 class _StreamingBubble extends StatelessWidget {

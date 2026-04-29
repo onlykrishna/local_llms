@@ -21,11 +21,15 @@ class ChatMessage {
   @HiveField(4)
   final bool? isFromKb;
 
+  @HiveField(5)
+  final bool? isSynthesized;
+
   ChatMessage({
     required this.id,
     required this.content,
     required this.isUser,
     this.isFromKb = false,
+    this.isSynthesized = false,
     DateTime? timestamp,
   }) : timestamp = timestamp ?? DateTime.now();
 

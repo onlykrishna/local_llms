@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -28,6 +29,9 @@ import 'objectbox.g.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 
+import 'domain/kb_embedding_service.dart';
+import 'data/document_chunk.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
@@ -42,7 +46,13 @@ void main() async {
     Hive.registerAdapter(ChatMessageAdapter());
     Hive.registerAdapter(DownloadStateAdapter());
     
-    await Hive.openBox<ChatMessage>(AppConstants.chatBoxName);
+    try {
+      await Hive.openBox<ChatMessage>(AppConstants.chatBoxName);
+    } catch (e) {
+      debugPrint('🚨 Chat box corrupt, clearing: $e');
+      await Hive.deleteBoxFromDisk(AppConstants.chatBoxName);
+      await Hive.openBox<ChatMessage>(AppConstants.chatBoxName);
+    }
     await Hive.openBox<DownloadState>(AppConstants.downloadBoxName);
   } catch (e) {
     debugPrint('🚨 Storage Init Error: $e');
@@ -63,28 +73,37 @@ Future<void> _initServices() async {
       Get.putAsync(() => FallbackDatasetService().init()),
     ]).timeout(const Duration(seconds: 15));
 
-    // 2. Heavy I/O & Model Services (Parallel)
+    // 2. Heavy I/O - ObjectBox MUST be first
     final docsDir = await getApplicationDocumentsDirectory();
-    final embeddingService = EmbeddingService();
-    
-    final results = await Future.wait([
-      openStore(directory: p.join(docsDir.path, "obx-rag")),
-      embeddingService.init(),
-      Future.microtask(() => Get.put(OnDeviceInferenceService())),
-      Future.microtask(() => Get.put(SourceCitationService())),
-    ]);
-
-    final store = results[0] as Store;
+    final store = await openStore(directory: p.join(docsDir.path, "obx-rag"));
     Get.put(store);
+    debugPrint('[STARTUP] ✅ ObjectBox ready');
+
+    // 3. Embedding model MUST be fully loaded before KB embedding
+    final embeddingService = EmbeddingService();
+    await embeddingService.init();
     Get.put(embeddingService);
+    debugPrint('[STARTUP] ✅ EmbeddingService ready');
     
-    // 3. Dependent Services
+    // 4. Heavy LLM & Utility Services
+    Get.put(OnDeviceInferenceService());
+    Get.put(SourceCitationService());
     Get.put(DocumentIngestionService(store, embeddingService));
     Get.put(RagRetrievalService(store, embeddingService));
+    
+    // 5. KB Embedding Service — Sequential (Safe Option)
+    final kbService = KbEmbeddingService(embeddingService, store.box<DocumentChunk>());
+    Get.put(kbService);
+    await kbService.initializeKb(); // Wait for KB to be ready
+    debugPrint('[STARTUP] ✅ KB embedding complete');
 
-    // 4. Router & Controller
+    // 6. Router & Controller
     await Get.putAsync(() => InferenceRouterService().init());
     Get.lazyPut(() => ModelManagerController());
+    
+    // 7. Warm-start LLM in background (non-blocking)
+    unawaited(Get.find<OnDeviceInferenceService>().warmup()); // Using warmup() as it matches existing code
+    debugPrint('[STARTUP] ✅ LLM warm start triggered');
     
     debugPrint('🚀 All services initialized in ${overallSw.elapsedMilliseconds}ms');
   } catch (e) {

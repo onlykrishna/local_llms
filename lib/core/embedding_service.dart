@@ -9,6 +9,7 @@ import 'embedding_isolate.dart';
 class EmbeddingService {
   SendPort? _isolateSendPort;
   final _isolateReady = Completer<void>();
+  bool get isInitialized => _isolateReady.isCompleted;
   final Map<String, List<double>> _cache = {};
 
   Future<void> init() async {

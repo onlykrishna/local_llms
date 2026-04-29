@@ -15,28 +15,15 @@ class AcronymExpander {
   static String expand(String query) {
     String q = query.toLowerCase().trim();
     _expansions.forEach((acronym, expansion) {
-      q = q.replaceAll(RegExp(r'\b' + acronym + r'\b'), expansion);
+      // Use lookbehind and lookahead to ensure acronym isn't part of a hyphenated word (like pre-emi)
+      final pattern = RegExp('(?<!-)\\b$acronym\\b(?!-)', caseSensitive: false);
+      q = q.replaceAll(pattern, expansion);
     });
     return q;
   }
 
   static String expandQuery(String query) {
-    // 1. Expand acronyms first
-    String expanded = expand(query);
-    
-    // 2. For "what is X" / "what does X mean" patterns, 
-    // add definition-oriented terms to enrich query vector
-    final definitionPattern = RegExp(r'^what (is|are|does|do)\b', caseSensitive: false);
-    if (definitionPattern.hasMatch(expanded)) {
-      expanded = '$expanded definition meaning explanation description';
-    }
-    
-    // 3. For extremely short queries, append search keywords
-    final words = expanded.split(RegExp(r'\s+'));
-    if (words.length < 4) {
-      expanded = '$expanded finance banking details';
-    }
-    
-    return expanded;
+    // Only expand acronyms, don't add generic noise which pollutes the embedding vector
+    return expand(query);
   }
 }
