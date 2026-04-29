@@ -89,30 +89,30 @@ class _SettingsPageState extends State<SettingsPage> {
 
             _buildModelManagerTile(theme),
 
-            const SizedBox(height: 40),
-            const _SectionHeader(title: 'PREFERENCES'),
+            // const SizedBox(height: 40),
+            // const _SectionHeader(title: 'PREFERENCES'),
             const SizedBox(height: 20),
 
-            Obx(() => _buildToggle(
-                  context: context,
-                  title: 'Aetheric Glow',
-                  subtitle: 'Enhanced OLED dark mode',
-                  value: s.isDarkMode.value,
-                  onChanged: s.toggleDarkMode,
-                  icon: s.isDarkMode.value
-                      ? Icons.dark_mode_rounded
-                      : Icons.light_mode_rounded,
-                )),
+            // Obx(() => _buildToggle(
+            //       context: context,
+            //       title: 'Aetheric Glow',
+            //       subtitle: 'Enhanced OLED dark mode',
+            //       value: s.isDarkMode.value,
+            //       onChanged: s.toggleDarkMode,
+            //       icon: s.isDarkMode.value
+            //           ? Icons.dark_mode_rounded
+            //           : Icons.light_mode_rounded,
+            //     )),
 
-            const SizedBox(height: 24),
-            Obx(() => _buildSlider(
-                  context: context,
-                  label: 'Context Buffer',
-                  value: s.contextWindow.value.toDouble(),
-                  onChanged: (v) => s.updateContextWindow(v.toInt()),
-                )),
+            // const SizedBox(height: 24),
+            // Obx(() => _buildSlider(
+            //       context: context,
+            //       label: 'Context Buffer',
+            //       value: s.contextWindow.value.toDouble(),
+            //       onChanged: (v) => s.updateContextWindow(v.toInt()),
+            //     )),
 
-            const SizedBox(height: 40),
+            // const SizedBox(height: 40),
             const _SectionHeader(title: 'MAINTENANCE'),
             const SizedBox(height: 20),
 

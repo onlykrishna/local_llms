@@ -136,8 +136,16 @@ class HomeScreen extends StatelessWidget {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text('Offline AI'),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset('assets/images/logo_icon.png', height: 24),
+            const SizedBox(width: 10),
+            const Text('Offline AI'),
+          ],
+        ),
         backgroundColor: Colors.transparent,
+        elevation: 0,
         flexibleSpace: ClipRect(
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
