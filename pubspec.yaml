@@ -59,6 +59,8 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
+    - assets/images/logo_icon.png
+    - assets/images/logo_full.png
     - assets/fallback_dataset.json
     - assets/local_brain.json
     - assets/models/all-minilm-l6-v2.onnx

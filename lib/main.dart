@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -67,14 +68,26 @@ Future<void> _initServices() async {
     final docsDir = await getApplicationDocumentsDirectory();
     final embeddingService = EmbeddingService();
     
+    Store? store;
+    try {
+      store = await openStore(directory: p.join(docsDir.path, "obx-rag"));
+    } catch (e) {
+      debugPrint('🚨 ObjectBox Index Mismatch (Branch Switch). Clearing DB: $e');
+      final dbDir = Directory(p.join(docsDir.path, "obx-rag"));
+      if (await dbDir.exists()) {
+        await dbDir.delete(recursive: true);
+      }
+      store = await openStore(directory: p.join(docsDir.path, "obx-rag"));
+    }
+
     final results = await Future.wait([
-      openStore(directory: p.join(docsDir.path, "obx-rag")),
+      Future.value(store),
       embeddingService.init(),
       Future.microtask(() => Get.put(OnDeviceInferenceService())),
       Future.microtask(() => Get.put(SourceCitationService())),
     ]);
 
-    final store = results[0] as Store;
+    store = results[0] as Store;
     Get.put(store);
     Get.put(embeddingService);
     
@@ -117,8 +130,16 @@ class HomeScreen extends StatelessWidget {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text('Offline AI'),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset('assets/images/logo_icon.png', height: 24),
+            const SizedBox(width: 10),
+            const Text('Offline AI'),
+          ],
+        ),
         backgroundColor: Colors.transparent,
+        elevation: 0,
         flexibleSpace: ClipRect(
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),

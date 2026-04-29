@@ -113,34 +113,52 @@ class AppDrawer extends StatelessWidget {
           end: Alignment.bottomRight,
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: theme.colorScheme.primary.withOpacity(0.1),
-              shape: BoxShape.circle,
-              border:
-                  Border.all(color: theme.colorScheme.primary.withOpacity(0.2)),
+              color: Colors.white.withOpacity(0.9),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                )
+              ],
             ),
-            child: Icon(Icons.psychology_rounded,
-                color: theme.colorScheme.primary, size: 32),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Offline AI',
-            style: TextStyle(
-              color: theme.colorScheme.onSurface,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              letterSpacing: -0.5,
+            child: Image.asset(
+              'assets/images/logo_icon.png',
+              width: 32,
+              height: 32,
+              fit: BoxFit.contain,
             ),
           ),
-          Text(
-            'Grounded Document Assistant',
-            style: TextStyle(
-                color: theme.colorScheme.onSurfaceVariant, fontSize: 12),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Offline AI',
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                Text(
+                  'Grounded Assistant',
+                  style: TextStyle(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -151,23 +169,33 @@ class AppDrawer extends StatelessWidget {
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
         child: Column(
           children: [
-            Text(
-              'v2.5.0-GROUNDED',
-              style: TextStyle(
-                  color: theme.colorScheme.outlineVariant,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold),
+            const Divider(height: 1),
+            const SizedBox(height: 20),
+            Image.asset(
+              'assets/images/logo_full.png',
+              height: 32,
+              fit: BoxFit.contain,
             ),
             const SizedBox(height: 8),
             Text(
-              'STRICT DOCUMENT-GROUNDED QA',
+              'Powered by Aeologic',
               style: TextStyle(
-                  color: theme.colorScheme.onSurfaceVariant.withOpacity(0.4),
+                color: theme.colorScheme.onSurfaceVariant.withOpacity(0.4),
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'v2.5.0-GROUNDED',
+              style: TextStyle(
+                  color: theme.colorScheme.outlineVariant.withOpacity(0.5),
                   fontSize: 9,
-                  letterSpacing: 1),
+                  fontWeight: FontWeight.w400),
             ),
           ],
         ),
