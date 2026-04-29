@@ -149,18 +149,18 @@ class RagRetrievalService extends GetxService {
     scored.sort((a, b) => b.score.compareTo(a.score));
     final top = scored.first;
 
-    debugPrint('[RAG] Top chunk: score=${top.score.toStringAsFixed(3)} '
-               'source=${top.chunk.source} '
-               'isKB=${top.chunk.isHardcoded}');
+    final bool isKb = top.chunk.isHardcoded == true;
 
-    if (top.score >= 1.60) {
+    if (shouldDirectBypass(top, expanded)) {
+      debugPrint('[RAG] DIRECT BYPASS — score=${top.score.toStringAsFixed(3)} isKB=$isKb');
       return RagResult.directBypass(
         _sanitizeChunk(top.chunk.text),
         [_formatSource(top.chunk)],
         [top],
-        isFromKb: top.chunk.isHardcoded == true,
+        isFromKb: isKb,
       );
-    } else if (top.score >= 1.20) {
+    } else if (shouldCallLlm(top)) {
+      debugPrint('[RAG] LLM GROUNDED — score=${top.score.toStringAsFixed(3)}');
       final topChunks = scored.take(2).toList();
       final context = topChunks
           .map((s) => _sanitizeChunk(s.chunk.text))
@@ -171,9 +171,37 @@ class RagRetrievalService extends GetxService {
         topChunks,
       );
     } else {
-      debugPrint('[RAG] Score ${top.score.toStringAsFixed(3)} below threshold 1.20 — rejecting');
+      debugPrint('[RAG] NO ANSWER — score=${top.score.toStringAsFixed(3)} below all thresholds');
       return RagResult.noAnswer();
     }
+  }
+
+  bool shouldDirectBypass(ScoredChunk top, String query) {
+    if (top.chunk.isHardcoded != true) {
+      return top.score >= 1.20;
+    }
+    
+    // For KB chunks: require BOTH score threshold AND
+    // at least some keyword relevance
+    final hasKeywordSignal = top.kw >= 0.14 || top.boost > 0.0;
+    
+    // High-confidence bypass: score >= 0.85 with keywords
+    if (top.score >= 0.85 && hasKeywordSignal) return true;
+    
+    // Very high confidence: bypass even without keywords
+    // (cosine alone is strong enough at this level)
+    if (top.score >= 1.10) return true;
+    
+    return false;
+  }
+
+  bool shouldCallLlm(ScoredChunk top) {
+    if (top.chunk.isHardcoded != true) {
+      return top.score >= 0.75;
+    }
+    // KB candidates need minimum keyword signal to trigger LLM
+    // to prevent hallucinating from unrelated KB chunks
+    return top.score >= 0.60 && top.kw >= 0.14;
   }
 
   double _keywordOverlap(String chunkText, String query) {
@@ -267,33 +295,5 @@ class RagRetrievalService extends GetxService {
     final denom = sqrt(normA) * sqrt(normB);
     if (denom == 0 || denom.isNaN || denom.isInfinite) return 0.0;
     return (dot / denom).clamp(-1.0, 1.0);
-  }
-
-  void diagnoseEmbeddings() {
-    final chunks = chunkBox.getAll();
-    if (chunks.isEmpty) {
-      debugPrint('[RAG_DIAG] No chunks in database.');
-      return;
-    }
-
-    int zeroCount = 0;
-    int emptyCount = 0;
-    int healthyCount = 0;
-
-    for (final c in chunks) {
-      final emb = c.embedding;
-      if (emb == null || emb.isEmpty) {
-        emptyCount++;
-      } else if (emb.every((v) => v == 0.0)) {
-        zeroCount++;
-      } else {
-        healthyCount++;
-      }
-    }
-
-    debugPrint('[RAG_DIAG] Total Chunks: ${chunks.length}');
-    debugPrint('[RAG_DIAG] Healthy: $healthyCount');
-    debugPrint('[RAG_DIAG] Zero-filled: $zeroCount');
-    debugPrint('[RAG_DIAG] Missing: $emptyCount');
   }
 }

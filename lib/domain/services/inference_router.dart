@@ -51,7 +51,8 @@ class InferenceRouterService extends GetxService {
     'sme', 'nbfc', 'eligibility', 'eligible', 'avail',
     'repayment', 'principal', 'instalment', 'installment',
     'balance transfer', 'plot', 'renovation', 'construction',
-    'salaried', 'self employed', 'itr', 'kyc', 'documents',
+    'salaried', 'self employed', 'itr', 'kyc', 'documents', 'document',
+    'summary', 'summarize', 'about', 'overview', 'explain', 'tell me',
   };
 
   bool _isOnTopic(String query) {
@@ -222,7 +223,7 @@ class InferenceRouterService extends GetxService {
       }
     } else {
       if (result.sources.isEmpty) {
-        yield result.content; // "No answer available"
+        yield _buildNoAnswerResponse(userMessage);
       } else {
         final sourcesText = result.sources.asMap().entries.map((e) => '${e.key + 1}. ${e.value}').join('\n');
         yield '${result.content}\n\n**Sources**\n\n$sourcesText';
@@ -230,6 +231,23 @@ class InferenceRouterService extends GetxService {
     }
 
     _emit(QueryStage.done, 'Done');
+  }
+
+  String _buildNoAnswerResponse(String query) {
+    final isSummaryRequest = RegExp(
+      r'summary|summarize|overview|explain all|tell me about everything',
+      caseSensitive: false,
+    ).hasMatch(query);
+
+    if (isSummaryRequest) {
+      return 'This knowledge base covers specific FAQ topics about '
+             'Home Loans, Working Capital Loans, Unsecured Business '
+             'Loans, and Loan Against Property. Try asking a specific '
+             'question like "What is an EMI?" or "Who can avail a '
+             'home loan?"';
+    }
+
+    return 'No answer available.';
   }
 
   String _buildPrompt(String context, String query) {

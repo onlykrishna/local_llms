@@ -463,7 +463,7 @@ class _EmptyChatView extends StatelessWidget {
     return Column(
       children: [
         Text(
-          'DOCUMENT ENTRY POINTS',
+          'SUGGESTED QUESTIONS',
           style: TextStyle(
             fontSize: 10,
             fontWeight: FontWeight.bold,
@@ -477,18 +477,9 @@ class _EmptyChatView extends StatelessWidget {
           runSpacing: 8,
           alignment: WrapAlignment.center,
           children: [
-            _QuestionChip(
-              label: 'Summarize Document',
-              onTap: () => ask('Provide a high-level summary of the uploaded document.'),
-            ),
-            _QuestionChip(
-              label: 'Key Findings',
-              onTap: () => ask('What are the top 3 key findings or takeaways from this text?'),
-            ),
-            _QuestionChip(
-              label: 'Verify Fact',
-              onTap: () => ask('Is there any mention of specific dates or milestones?'),
-            ),
+            _QuestionChip(label: 'What is an EMI?', onTap: () => ask('What is an EMI?')),
+            _QuestionChip(label: 'Home Loan Eligibility?', onTap: () => ask('Who can avail a home loan?')),
+            _QuestionChip(label: 'Business Loan Docs?', onTap: () => ask('What documents are needed for a working capital loan?')),
           ],
         ).animate().fadeIn(delay: 600.ms),
       ],

@@ -31,7 +31,6 @@ class KbManagerController extends GetxController {
     super.onInit();
     loadDocuments();
     // Run diagnostics to verify embedding health
-    retrievalService.diagnoseEmbeddings();
   }
 
   void loadDocuments() {
