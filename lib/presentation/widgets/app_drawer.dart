@@ -23,15 +23,15 @@ class AppDrawer extends StatelessWidget {
       child: Column(
         children: [
           _buildHeader(context),
-          
           Expanded(
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               children: [
                 const SizedBox(height: 16),
-                Obx(() => _BackendStatusCard(backend: router.currentBackend.value)),
+                Obx(() =>
+                    _BackendStatusCard(backend: router.currentBackend.value)),
                 const SizedBox(height: 24),
-                
+
                 _DrawerItem(
                   icon: Icons.history_rounded,
                   label: 'Chat History',
@@ -52,24 +52,24 @@ class AppDrawer extends StatelessWidget {
                     Get.to(() => const KbManagerPage());
                   },
                 ),
-                _DrawerItem(
-                  icon: Icons.settings_rounded,
-                  label: 'Global Settings',
-                  subtitle: 'API keys & Network',
-                  color: theme.colorScheme.primary.withOpacity(0.8),
-                  onTap: () {
-                    Get.back();
-                    Get.to(() => const SettingsPage());
-                  },
-                ),
-                
+                // _DrawerItem(
+                //   icon: Icons.settings_rounded,
+                //   label: 'Global Settings',
+                //   subtitle: 'API keys & Network',
+                //   color: theme.colorScheme.primary.withOpacity(0.8),
+                //   onTap: () {
+                //     Get.back();
+                //     Get.to(() => const SettingsPage());
+                //   },
+                // ),
+
                 const Divider(height: 40),
-                
-                Obx(() => _ThemeToggle(
-                  isDarkMode: settings.isDarkMode.value,
-                  onChanged: settings.toggleDarkMode,
-                )),
-                
+
+                // Obx(() => _ThemeToggle(
+                //       isDarkMode: settings.isDarkMode.value,
+                //       onChanged: settings.toggleDarkMode,
+                //     )),
+
                 _DrawerItem(
                   icon: Icons.delete_outline_rounded,
                   label: 'Clear Current Chat',
@@ -83,7 +83,6 @@ class AppDrawer extends StatelessWidget {
               ],
             ),
           ),
-          
           _buildFooter(theme),
         ],
       ),
@@ -93,7 +92,7 @@ class AppDrawer extends StatelessWidget {
   Widget _buildHeader(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    
+
     return Container(
       width: double.infinity,
       padding: EdgeInsets.only(
@@ -105,7 +104,9 @@ class AppDrawer extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            isDark ? const Color(0xFF2E1A47) : theme.colorScheme.primary.withOpacity(0.8),
+            isDark
+                ? const Color(0xFF2E1A47)
+                : theme.colorScheme.primary.withOpacity(0.8),
             theme.colorScheme.surface,
           ],
           begin: Alignment.topLeft,
@@ -120,9 +121,11 @@ class AppDrawer extends StatelessWidget {
             decoration: BoxDecoration(
               color: theme.colorScheme.primary.withOpacity(0.1),
               shape: BoxShape.circle,
-              border: Border.all(color: theme.colorScheme.primary.withOpacity(0.2)),
+              border:
+                  Border.all(color: theme.colorScheme.primary.withOpacity(0.2)),
             ),
-            child: Icon(Icons.psychology_rounded, color: theme.colorScheme.primary, size: 32),
+            child: Icon(Icons.psychology_rounded,
+                color: theme.colorScheme.primary, size: 32),
           ),
           const SizedBox(height: 16),
           Text(
@@ -136,7 +139,8 @@ class AppDrawer extends StatelessWidget {
           ),
           Text(
             'Grounded Document Assistant',
-            style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12),
+            style: TextStyle(
+                color: theme.colorScheme.onSurfaceVariant, fontSize: 12),
           ),
         ],
       ),
@@ -152,12 +156,18 @@ class AppDrawer extends StatelessWidget {
           children: [
             Text(
               'v2.5.0-GROUNDED',
-              style: TextStyle(color: theme.colorScheme.outlineVariant, fontSize: 10, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                  color: theme.colorScheme.outlineVariant,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
               'STRICT DOCUMENT-GROUNDED QA',
-              style: TextStyle(color: theme.colorScheme.onSurfaceVariant.withOpacity(0.4), fontSize: 9, letterSpacing: 1),
+              style: TextStyle(
+                  color: theme.colorScheme.onSurfaceVariant.withOpacity(0.4),
+                  fontSize: 9,
+                  letterSpacing: 1),
             ),
           ],
         ),
@@ -194,15 +204,24 @@ class _BackendStatusCard extends StatelessWidget {
                   children: [
                     Text(
                       'SYSTEM STATUS',
-                      style: TextStyle(color: _color.withOpacity(0.6), fontSize: 10, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                          color: _color.withOpacity(0.6),
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold),
                     ),
                     Text(
                       _getLabel(Get.find<SettingsService>().modelLabel),
-                      style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold, fontSize: 16),
+                      style: TextStyle(
+                          color: theme.colorScheme.onSurface,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16),
                     ),
                     Text(
-                      _getSubtitle(backend, Get.find<SettingsService>().selectedModel.value),
-                      style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 11),
+                      _getSubtitle(backend,
+                          Get.find<SettingsService>().selectedModel.value),
+                      style: TextStyle(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          fontSize: 11),
                     ),
                   ],
                 ),
@@ -216,22 +235,27 @@ class _BackendStatusCard extends StatelessWidget {
 
   Color get _color {
     switch (backend) {
-      case InferenceBackend.ollama:   return const Color(0xFF5D38BB);
-      case InferenceBackend.onDevice: return const Color(0xFFFFB4AB);
+      case InferenceBackend.ollama:
+        return const Color(0xFF5D38BB);
+      case InferenceBackend.onDevice:
+        return const Color(0xFFFFB4AB);
     }
   }
 
   String _getLabel(String modelLabel) {
     switch (backend) {
-      case InferenceBackend.ollama:   return 'Ollama LAN';
-      case InferenceBackend.onDevice: return modelLabel;
+      case InferenceBackend.ollama:
+        return 'Ollama LAN';
+      case InferenceBackend.onDevice:
+        return modelLabel;
     }
   }
 
   String _getSubtitle(InferenceBackend backend, String modelPath) {
     switch (backend) {
-      case InferenceBackend.ollama:   return 'Network · Private host';
-      case InferenceBackend.onDevice: 
+      case InferenceBackend.ollama:
+        return 'Network · Private host';
+      case InferenceBackend.onDevice:
         final isPhi = modelPath.toLowerCase().contains('phi');
         return isPhi ? 'Offline · 3.8B Parameter' : 'Offline · 1.0B Parameter';
     }
@@ -246,25 +270,31 @@ class _PulseIndicator extends StatefulWidget {
   State<_PulseIndicator> createState() => _PulseIndicatorState();
 }
 
-class _PulseIndicatorState extends State<_PulseIndicator> with SingleTickerProviderStateMixin {
+class _PulseIndicatorState extends State<_PulseIndicator>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
+    _controller =
+        AnimationController(vsync: this, duration: const Duration(seconds: 2))
+          ..repeat();
   }
+
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
   }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
         return Container(
-          width: 12, height: 12,
+          width: 12,
+          height: 12,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: widget.color.withOpacity(1 - _controller.value),
@@ -324,7 +354,8 @@ class _DrawerItem extends StatelessWidget {
                     Text(
                       label,
                       style: TextStyle(
-                        color: isDestructive ? color : theme.colorScheme.onSurface,
+                        color:
+                            isDestructive ? color : theme.colorScheme.onSurface,
                         fontWeight: FontWeight.w600,
                         fontSize: 15,
                       ),
@@ -332,7 +363,10 @@ class _DrawerItem extends StatelessWidget {
                     if (subtitle != null)
                       Text(
                         subtitle!,
-                        style: TextStyle(color: theme.colorScheme.onSurfaceVariant.withOpacity(0.6), fontSize: 11),
+                        style: TextStyle(
+                            color: theme.colorScheme.onSurfaceVariant
+                                .withOpacity(0.6),
+                            fontSize: 11),
                       ),
                   ],
                 ),
@@ -374,7 +408,10 @@ class _ThemeToggle extends StatelessWidget {
             Expanded(
               child: Text(
                 'Aetheric Glow',
-                style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 14, fontWeight: FontWeight.w500),
+                style: TextStyle(
+                    color: theme.colorScheme.onSurface,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500),
               ),
             ),
             Switch(
@@ -389,6 +426,3 @@ class _ThemeToggle extends StatelessWidget {
     );
   }
 }
-
-
-

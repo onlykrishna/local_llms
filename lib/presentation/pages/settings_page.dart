@@ -59,31 +59,31 @@ class _SettingsPageState extends State<SettingsPage> {
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
           children: [
-            const _SectionHeader(title: 'AI BACKEND'),
-            const SizedBox(height: 20),
+            // const _SectionHeader(title: 'AI BACKEND'),
+            // const SizedBox(height: 20),
 
-            _buildTextField(
-              context: context,
-              controller: ollamaIpCtrl,
-              label: 'Ollama IP Address',
-              hint: 'e.g. 192.168.1.100',
-              icon: Icons.lan_rounded,
-              onChanged: s.updateOllamaIp,
-            ),
-            const SizedBox(height: 16),
-            _buildTextField(
-              context: context,
-              controller: ollamaPortCtrl,
-              label: 'Ollama Port',
-              hint: 'e.g. 11434',
-              icon: Icons.swap_horiz_rounded,
-              onChanged: s.updateOllamaPort,
-            ),
-            
-            const SizedBox(height: 20),
-            _buildConnectionTester(theme),
+            // _buildTextField(
+            //   context: context,
+            //   controller: ollamaIpCtrl,
+            //   label: 'Ollama IP Address',
+            //   hint: 'e.g. 192.168.1.100',
+            //   icon: Icons.lan_rounded,
+            //   onChanged: s.updateOllamaIp,
+            // ),
+            // const SizedBox(height: 16),
+            // _buildTextField(
+            //   context: context,
+            //   controller: ollamaPortCtrl,
+            //   label: 'Ollama Port',
+            //   hint: 'e.g. 11434',
+            //   icon: Icons.swap_horiz_rounded,
+            //   onChanged: s.updateOllamaPort,
+            // ),
 
-            const SizedBox(height: 40),
+            // const SizedBox(height: 20),
+            // _buildConnectionTester(theme),
+
+            // const SizedBox(height: 40),
             const _SectionHeader(title: 'LOCAL COMPUTE'),
             const SizedBox(height: 20),
 
@@ -91,24 +91,26 @@ class _SettingsPageState extends State<SettingsPage> {
 
             const SizedBox(height: 40),
             const _SectionHeader(title: 'PREFERENCES'),
-            const SizedBox(height: 20),
+            // const SizedBox(height: 20),
 
-            Obx(() => _buildToggle(
-              context: context,
-              title: 'Aetheric Glow',
-              subtitle: 'Enhanced OLED dark mode',
-              value: s.isDarkMode.value,
-              onChanged: s.toggleDarkMode,
-              icon: s.isDarkMode.value ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
-            )),
-            
+            // Obx(() => _buildToggle(
+            //       context: context,
+            //       title: 'Aetheric Glow',
+            //       subtitle: 'Enhanced OLED dark mode',
+            //       value: s.isDarkMode.value,
+            //       onChanged: s.toggleDarkMode,
+            //       icon: s.isDarkMode.value
+            //           ? Icons.dark_mode_rounded
+            //           : Icons.light_mode_rounded,
+            //     )),
+
             const SizedBox(height: 24),
             Obx(() => _buildSlider(
-              context: context,
-              label: 'Context Buffer',
-              value: s.contextWindow.value.toDouble(),
-              onChanged: (v) => s.updateContextWindow(v.toInt()),
-            )),
+                  context: context,
+                  label: 'Context Buffer',
+                  value: s.contextWindow.value.toDouble(),
+                  onChanged: (v) => s.updateContextWindow(v.toInt()),
+                )),
 
             const SizedBox(height: 40),
             const _SectionHeader(title: 'MAINTENANCE'),
@@ -130,7 +132,8 @@ class _SettingsPageState extends State<SettingsPage> {
               title: 'Clear Knowledge Base',
               subtitle: 'Reset all ingested documents',
               icon: Icons.auto_delete_rounded,
-              onTap: () => _confirmClearCache(context, 'Knowledge Base', () async {
+              onTap: () =>
+                  _confirmClearCache(context, 'Knowledge Base', () async {
                 final store = Get.find<Store>();
                 store.box<SourceDocument>().removeAll();
                 store.box<DocumentChunk>().removeAll();
@@ -143,7 +146,8 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  void _confirmClearCache(BuildContext context, String target, VoidCallback onConfirm) {
+  void _confirmClearCache(
+      BuildContext context, String target, VoidCallback onConfirm) {
     Get.dialog(
       AlertDialog(
         title: Text('Clear $target?'),
@@ -151,12 +155,12 @@ class _SettingsPageState extends State<SettingsPage> {
         actions: [
           TextButton(onPressed: () => Get.back(), child: const Text('Cancel')),
           TextButton(
-            onPressed: () {
-              Get.back();
-              onConfirm();
-            }, 
-            child: const Text('Clear', style: TextStyle(color: Colors.redAccent))
-          ),
+              onPressed: () {
+                Get.back();
+                onConfirm();
+              },
+              child: const Text('Clear',
+                  style: TextStyle(color: Colors.redAccent))),
         ],
       ),
     );
@@ -187,12 +191,20 @@ class _SettingsPageState extends State<SettingsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold)),
-                  Text(subtitle, style: TextStyle(color: theme.colorScheme.onSurfaceVariant.withOpacity(0.6), fontSize: 11)),
+                  Text(title,
+                      style: TextStyle(
+                          color: theme.colorScheme.onSurface,
+                          fontWeight: FontWeight.bold)),
+                  Text(subtitle,
+                      style: TextStyle(
+                          color: theme.colorScheme.onSurfaceVariant
+                              .withOpacity(0.6),
+                          fontSize: 11)),
                 ],
               ),
             ),
-            const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 16),
+            const Icon(Icons.warning_amber_rounded,
+                color: Colors.orange, size: 16),
           ],
         ),
       ),
@@ -213,14 +225,20 @@ class _SettingsPageState extends State<SettingsPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label.toUpperCase(), style: TextStyle(color: theme.colorScheme.onSurfaceVariant.withOpacity(0.6), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+        Text(label.toUpperCase(),
+            style: TextStyle(
+                color: theme.colorScheme.onSurfaceVariant.withOpacity(0.6),
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1)),
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           decoration: BoxDecoration(
             color: theme.colorScheme.surfaceContainer,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: theme.colorScheme.outline.withOpacity(0.5)),
+            border:
+                Border.all(color: theme.colorScheme.outline.withOpacity(0.5)),
           ),
           child: TextField(
             controller: controller,
@@ -229,7 +247,9 @@ class _SettingsPageState extends State<SettingsPage> {
             style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 14),
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle: TextStyle(color: theme.colorScheme.onSurfaceVariant.withOpacity(0.5), fontSize: 14),
+              hintStyle: TextStyle(
+                  color: theme.colorScheme.onSurfaceVariant.withOpacity(0.5),
+                  fontSize: 14),
               border: InputBorder.none,
               icon: Icon(icon, color: theme.colorScheme.primary, size: 18),
               suffixIcon: suffix,
@@ -242,36 +262,40 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Widget _buildConnectionTester(ThemeData theme) {
     return Obx(() => ElevatedButton(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: theme.colorScheme.primary.withOpacity(0.05),
-        foregroundColor: theme.colorScheme.primary,
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: theme.colorScheme.primary.withOpacity(0.2)),
-        ),
-        minimumSize: const Size.fromHeight(48),
-      ),
-      onPressed: () async {
-        connectionResult.value = 'Testing...';
-        try {
-          final probeDio = Dio();
-          await probeDio.get(
-            'http://${s.ollamaIp.value}:${s.ollamaPort.value}/api/tags',
-            options: Options(connectTimeout: const Duration(seconds: 2)),
-          );
-          connectionResult.value = '✅ Ollama Online';
-        } catch (e) {
-          connectionResult.value = '❌ Unreachable';
-        }
-      },
-      child: Text(connectionResult.value.isEmpty ? 'Test Local Connectivity' : connectionResult.value),
-    ));
+          style: ElevatedButton.styleFrom(
+            backgroundColor: theme.colorScheme.primary.withOpacity(0.05),
+            foregroundColor: theme.colorScheme.primary,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side:
+                  BorderSide(color: theme.colorScheme.primary.withOpacity(0.2)),
+            ),
+            minimumSize: const Size.fromHeight(48),
+          ),
+          onPressed: () async {
+            connectionResult.value = 'Testing...';
+            try {
+              final probeDio = Dio();
+              await probeDio.get(
+                'http://${s.ollamaIp.value}:${s.ollamaPort.value}/api/tags',
+                options: Options(connectTimeout: const Duration(seconds: 2)),
+              );
+              connectionResult.value = '✅ Ollama Online';
+            } catch (e) {
+              connectionResult.value = '❌ Unreachable';
+            }
+          },
+          child: Text(connectionResult.value.isEmpty
+              ? 'Test Local Connectivity'
+              : connectionResult.value),
+        ));
   }
 
   Widget _buildModelManagerTile(ThemeData theme) {
     return InkWell(
-      onTap: () => Get.to(() => const ModelManagerPage(), binding: ModelManagerBinding()),
+      onTap: () => Get.to(() => const ModelManagerPage(),
+          binding: ModelManagerBinding()),
       borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: const EdgeInsets.all(16),
@@ -288,32 +312,46 @@ class _SettingsPageState extends State<SettingsPage> {
                 color: theme.colorScheme.primary.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(Icons.memory_rounded, color: theme.colorScheme.primary),
+              child:
+                  Icon(Icons.memory_rounded, color: theme.colorScheme.primary),
             ),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Model Management', style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold)),
+                  Text('Model Management',
+                      style: TextStyle(
+                          color: theme.colorScheme.onSurface,
+                          fontWeight: FontWeight.bold)),
                   Obx(() => Text(
-                    s.selectedModelId.value.isNotEmpty ? '${s.modelLabel} Selected' : 'No local model active',
-                    style: TextStyle(
-                      color: s.selectedModelId.value.isNotEmpty ? theme.colorScheme.primary : theme.colorScheme.error, 
-                      fontSize: 12
-                    ),
-                  )),
+                        s.selectedModelId.value.isNotEmpty
+                            ? '${s.modelLabel} Selected'
+                            : 'No local model active',
+                        style: TextStyle(
+                            color: s.selectedModelId.value.isNotEmpty
+                                ? theme.colorScheme.primary
+                                : theme.colorScheme.error,
+                            fontSize: 12),
+                      )),
                 ],
               ),
             ),
-            Icon(Icons.chevron_right_rounded, color: theme.colorScheme.onSurfaceVariant.withOpacity(0.4)),
+            Icon(Icons.chevron_right_rounded,
+                color: theme.colorScheme.onSurfaceVariant.withOpacity(0.4)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildToggle({required BuildContext context, required String title, required String subtitle, required bool value, required Function(bool) onChanged, required IconData icon}) {
+  Widget _buildToggle(
+      {required BuildContext context,
+      required String title,
+      required String subtitle,
+      required bool value,
+      required Function(bool) onChanged,
+      required IconData icon}) {
     final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.all(16),
@@ -330,8 +368,15 @@ class _SettingsPageState extends State<SettingsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold)),
-                Text(subtitle, style: TextStyle(color: theme.colorScheme.onSurfaceVariant.withOpacity(0.6), fontSize: 11)),
+                Text(title,
+                    style: TextStyle(
+                        color: theme.colorScheme.onSurface,
+                        fontWeight: FontWeight.bold)),
+                Text(subtitle,
+                    style: TextStyle(
+                        color:
+                            theme.colorScheme.onSurfaceVariant.withOpacity(0.6),
+                        fontSize: 11)),
               ],
             ),
           ),
@@ -346,7 +391,11 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _buildSlider({required BuildContext context, required String label, required double value, required Function(double) onChanged}) {
+  Widget _buildSlider(
+      {required BuildContext context,
+      required String label,
+      required double value,
+      required Function(double) onChanged}) {
     final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -354,8 +403,17 @@ class _SettingsPageState extends State<SettingsPage> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(label.toUpperCase(), style: TextStyle(color: theme.colorScheme.onSurfaceVariant.withOpacity(0.6), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
-            Text('${value.toInt()} MSG', style: TextStyle(color: theme.colorScheme.primary, fontSize: 10, fontWeight: FontWeight.bold)),
+            Text(label.toUpperCase(),
+                style: TextStyle(
+                    color: theme.colorScheme.onSurfaceVariant.withOpacity(0.6),
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1)),
+            Text('${value.toInt()} MSG',
+                style: TextStyle(
+                    color: theme.colorScheme.primary,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold)),
           ],
         ),
         Slider(
