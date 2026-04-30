@@ -34,16 +34,11 @@ class KbManagerController extends GetxController {
   }
 
   void loadDocuments() {
-    final query = docBox.query(SourceDocument_.domain.equals(selectedDomain.value.name))
+    final query = docBox.query()
         .order(SourceDocument_.uploadedAt, flags: Order.descending)
         .build();
     documents.value = query.find();
     query.close();
-  }
-
-  void changeDomain(KbDomain domain) {
-    selectedDomain.value = domain;
-    loadDocuments();
   }
 
   Future<void> pickAndIngestPdf() async {
@@ -142,8 +137,6 @@ class KbManagerPage extends StatelessWidget {
       ),
       body: Column(
         children: [
-          _buildDomainSelector(controller, theme),
-          const Divider(height: 1),
           Obx(() {
             if (controller.isIngesting.value) {
               return Padding(
@@ -167,7 +160,7 @@ class KbManagerPage extends StatelessWidget {
             child: Obx(() {
               if (controller.documents.isEmpty) {
                 return Center(
-                  child: Text('No documents in this domain.', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
+                  child: Text('No documents uploaded.', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
                 );
               }
               return ListView.builder(
@@ -197,51 +190,5 @@ class KbManagerPage extends StatelessWidget {
     );
   }
 
-  Widget _buildDomainSelector(KbManagerController controller, ThemeData theme) {
-    return Container(
-      height: 70,
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: KbDomain.values.length,
-        itemBuilder: (context, index) {
-          final domain = KbDomain.values[index];
-          return Obx(() {
-            final isSelected = controller.selectedDomain.value == domain;
-            return Padding(
-              padding: const EdgeInsets.only(right: 8.0),
-              child: ChoiceChip(
-                label: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SvgPicture.asset(
-                      domain.icon,
-                      width: 16,
-                      height: 16,
-                      colorFilter: ColorFilter.mode(
-                        isSelected ? theme.colorScheme.onPrimary : theme.colorScheme.onSurfaceVariant,
-                        BlendMode.srcIn,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(domain.label),
-                  ],
-                ),
-                selected: isSelected,
-                onSelected: (selected) {
-                  if (selected) controller.changeDomain(domain);
-                },
-                selectedColor: theme.colorScheme.primary,
-                labelStyle: TextStyle(
-                  color: isSelected ? theme.colorScheme.onPrimary : theme.colorScheme.onSurface,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                ),
-              ),
-            );
-          });
-        },
-      ),
-    );
-  }
+
 }

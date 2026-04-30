@@ -26,14 +26,7 @@ class DocumentIngestionService extends GetxService {
     ingestionProgress.value = 0.0;
     final fileName = file.path.split('/').last;
 
-    // STEP 1: Clear existing chunks for this domain first to prevent duplicates/stale data
-    final existingIds = chunkBox
-        .query(DocumentChunk_.domain.equals(domain.name))
-        .build()
-        .findIds();
-    chunkBox.removeMany(existingIds);
-    debugPrint('[Ingestion] Cleared ${existingIds.length} old chunks for domain: ${domain.name}');
-
+    // STEP 1: New document ingestion
     final sourceDoc = SourceDocument(
       fileName: fileName,
       filePath: file.path,

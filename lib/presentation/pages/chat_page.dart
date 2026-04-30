@@ -16,103 +16,99 @@ class ChatPage extends GetView<ChatController> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     
-    return Scaffold(
-      backgroundColor: Colors.transparent, 
-      resizeToAvoidBottomInset: true,
-      body: Stack(
-        children: [
-          Column(
-            children: [
-              const SizedBox(height: 100), 
-              const BackendStatusBar(),
-              _buildKbStatusBar(), // KB Status Panel
-              
-              Expanded(
-                child: Obx(() {
-                  if (controller.messages.isEmpty && !controller.isGenerating.value) {
-                    return const _EmptyChatView();
-                  }
-                  return ListView.builder(
-                    controller: controller.scrollController,
-                    reverse: true, 
-                    physics: const BouncingScrollPhysics(),
-                    itemCount: controller.messages.length + (controller.isGenerating.value ? 1 : 0),
-                    padding: const EdgeInsets.only(bottom: 24, top: 12),
-                    itemBuilder: (context, index) {
-                      if (index == 0 && controller.isGenerating.value) {
-                        if (controller.currentResponseText.value.isEmpty) {
-                          return Animate(child: const TypingIndicator())
-                              .fadeIn(duration: 400.ms)
-                              .slideY(begin: 0.1, end: 0);
-                        } else {
-                          return Animate(child: _StreamingBubble(controller: controller))
-                              .fadeIn(duration: 300.ms);
-                        }
+    return Stack(
+      children: [
+        Column(
+          children: [
+            const SizedBox(height: 100), 
+            const BackendStatusBar(),
+            _buildKbStatusBar(), // KB Status Panel
+            
+            Expanded(
+              child: Obx(() {
+                if (controller.messages.isEmpty && !controller.isGenerating.value) {
+                  return const _EmptyChatView();
+                }
+                return ListView.builder(
+                  controller: controller.scrollController,
+                  reverse: true, 
+                  physics: const BouncingScrollPhysics(),
+                  itemCount: controller.messages.length + (controller.isGenerating.value ? 1 : 0),
+                  padding: const EdgeInsets.only(bottom: 24, top: 12),
+                  itemBuilder: (context, index) {
+                    if (index == 0 && controller.isGenerating.value) {
+                      if (controller.currentResponseText.value.isEmpty) {
+                        return Animate(child: const TypingIndicator())
+                            .fadeIn(duration: 400.ms)
+                            .slideY(begin: 0.1, end: 0);
+                      } else {
+                        return Animate(child: _StreamingBubble(controller: controller))
+                            .fadeIn(duration: 300.ms);
                       }
-                      final msgIndex = controller.isGenerating.value ? index - 1 : index;
-                      final msg = controller.messages[msgIndex];
-                      return Animate(child: MessageBubble(message: msg))
-                          .fadeIn(duration: 400.ms)
-                          .slideX(begin: msg.isUser ? 0.05 : -0.05, end: 0);
-                    },
-                  );
-                }),
-              ),
-              _buildInputArea(context),
-            ],
-          ),
-          // Initialization overlay
-          Obx(() {
-            if (controller.isModelInitializing.value) {
-              return Positioned(
-                top: 150,
-                left: 16,
-                right: 16,
-                child: Animate(
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: theme.colorScheme.primary.withOpacity(0.3)),
-                      boxShadow: [
-                        BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4)),
-                      ]
-                    ),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 20, 
-                          height: 20, 
-                          child: CircularProgressIndicator(strokeWidth: 2, color: theme.colorScheme.primary)
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Initializing local engine...',
-                                style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold, fontSize: 13),
-                              ),
-                              const SizedBox(height: 4),
-                              Obx(() => Text(
-                                controller.loadingStage.value,
-                                style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.w500, fontSize: 12),
-                              )),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+                    }
+                    final msgIndex = controller.isGenerating.value ? index - 1 : index;
+                    final msg = controller.messages[msgIndex];
+                    return Animate(child: MessageBubble(message: msg))
+                        .fadeIn(duration: 400.ms)
+                        .slideX(begin: msg.isUser ? 0.05 : -0.05, end: 0);
+                  },
+                );
+              }),
+            ),
+            _buildInputArea(context),
+          ],
+        ),
+        // Initialization overlay
+        Obx(() {
+          if (controller.isModelInitializing.value) {
+            return Positioned(
+              top: 150,
+              left: 16,
+              right: 16,
+              child: Animate(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: theme.colorScheme.primary.withOpacity(0.3)),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4)),
+                    ]
                   ),
-                ).fadeIn(duration: 300.ms).slideY(begin: -0.2, end: 0),
-              );
-            }
-            return const SizedBox.shrink();
-          }),
-        ],
-      ),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 20, 
+                        height: 20, 
+                        child: CircularProgressIndicator(strokeWidth: 2, color: theme.colorScheme.primary)
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Initializing local engine...',
+                              style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                            const SizedBox(height: 4),
+                            Obx(() => Text(
+                              controller.loadingStage.value,
+                              style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.w500, fontSize: 12),
+                            )),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ).fadeIn(duration: 300.ms).slideY(begin: -0.2, end: 0),
+            );
+          }
+          return const SizedBox.shrink();
+        }),
+      ],
     );
   }
 
