@@ -41,6 +41,7 @@ dependencies:
   uuid: ^4.2.2
   intl: ^0.19.0
   json_annotation: ^4.9.0
+  crypto: ^3.0.3
   
   # RAG / Vector DB
   objectbox: ^4.0.0
@@ -72,3 +73,9 @@ flutter:
     - assets/icons/banking.svg
     - assets/icons/legal.svg
     - assets/icons/govt.svg
+    # BEGIN AUTO-GENERATED PDF ASSETS — do not edit manually
+    - assets/pdfs/home_loan_faqs.pdf
+    - assets/pdfs/working_capital_loan_faqs.pdf
+    - assets/pdfs/unsecured_business_loan_faqs.pdf
+    - assets/pdfs/loan_against_property_faqs.pdf
+    # END AUTO-GENERATED PDF ASSETS

@@ -7,6 +7,7 @@ import '../controllers/chat_controller.dart';
 import '../pages/history_page.dart';
 import '../pages/settings_page.dart';
 import '../pages/kb_manager_page.dart';
+import '../pages/pdf_library_page.dart';
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
@@ -40,6 +41,16 @@ class AppDrawer extends StatelessWidget {
                   onTap: () {
                     Get.back();
                     Get.to(() => const HistoryPage());
+                  },
+                ),
+                _DrawerItem(
+                  icon: Icons.folder_shared_rounded,
+                  label: 'PDF Library',
+                  subtitle: 'View indexed documents',
+                  color: theme.colorScheme.primary,
+                  onTap: () {
+                    Get.back();
+                    Get.to(() => const PdfLibraryPage());
                   },
                 ),
                 _DrawerItem(

@@ -31,6 +31,8 @@ import 'package:path/path.dart' as p;
 
 import 'domain/kb_embedding_service.dart';
 import 'data/document_chunk.dart';
+import 'data/models/pdf_document_meta.dart';
+import 'core/services/bundled_pdf_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -45,13 +47,20 @@ void main() async {
     await Hive.initFlutter();
     Hive.registerAdapter(ChatMessageAdapter());
     Hive.registerAdapter(DownloadStateAdapter());
+    Hive.registerAdapter(PdfDocumentMetaAdapter());
     
     try {
       await Hive.openBox<ChatMessage>(AppConstants.chatBoxName);
+      await Hive.openBox<PdfDocumentMeta>(AppConstants.pdfLibraryBoxName);
+      await Hive.openBox<String>(AppConstants.bundledPdfHashesBoxName);
+      await Hive.openBox(AppConstants.settingsBoxName);
     } catch (e) {
-      debugPrint('🚨 Chat box corrupt, clearing: $e');
+      debugPrint('🚨 Hive box corrupt, clearing: $e');
       await Hive.deleteBoxFromDisk(AppConstants.chatBoxName);
       await Hive.openBox<ChatMessage>(AppConstants.chatBoxName);
+      await Hive.openBox<PdfDocumentMeta>(AppConstants.pdfLibraryBoxName);
+      await Hive.openBox<String>(AppConstants.bundledPdfHashesBoxName);
+      await Hive.openBox(AppConstants.settingsBoxName);
     }
     await Hive.openBox<DownloadState>(AppConstants.downloadBoxName);
   } catch (e) {
@@ -91,7 +100,10 @@ Future<void> _initServices() async {
     Get.put(DocumentIngestionService(store, embeddingService));
     Get.put(RagRetrievalService(store, embeddingService));
     
-    // 5. KB Embedding Service — Sequential (Safe Option)
+    // 5. Bundled PDF Service & KB Embedding
+    final bundledPdfService = Get.put(BundledPdfService());
+    await bundledPdfService.init();
+    
     final kbService = KbEmbeddingService(embeddingService, store.box<DocumentChunk>());
     Get.put(kbService);
     await kbService.initializeKb(); // Wait for KB to be ready

@@ -19,7 +19,7 @@ class ModelNotDownloadedException implements Exception {
 /// On-device inference via llamadart (llama.cpp GGUF) with Isolate support.
 class OnDeviceInferenceService extends GetxService {
   final SettingsService _settings = Get.find<SettingsService>();
-  
+
   Isolate? _isolate;
   SendPort? _isolateSendPort;
   ReceivePort? _mainReceivePort;
@@ -49,8 +49,9 @@ class OnDeviceInferenceService extends GetxService {
 
   Future<void> _startIsolate() async {
     _mainReceivePort = ReceivePort();
-    _isolate = await Isolate.spawn(inferenceIsolateEntryPoint, _mainReceivePort!.sendPort);
-    
+    _isolate = await Isolate.spawn(
+        inferenceIsolateEntryPoint, _mainReceivePort!.sendPort);
+
     _mainReceivePort!.listen((message) {
       if (message is SendPort) {
         _isolateSendPort = message;
@@ -60,14 +61,16 @@ class OnDeviceInferenceService extends GetxService {
   }
 
   void _disposeIsolate() {
-    _isolateSendPort?.send(IsolateRequest('dispose', null, ReceivePort().sendPort));
+    _isolateSendPort
+        ?.send(IsolateRequest('dispose', null, ReceivePort().sendPort));
     _isolate?.kill(priority: Isolate.immediate);
     _mainReceivePort?.close();
   }
 
   Future<void> _disposeHandles() async {
     await _isolateReady.future;
-    _isolateSendPort?.send(IsolateRequest('dispose', null, ReceivePort().sendPort));
+    _isolateSendPort
+        ?.send(IsolateRequest('dispose', null, ReceivePort().sendPort));
     _isInitialized = false;
     isModelReady.value = false;
     _initializedModelPath = null;
@@ -114,7 +117,7 @@ class OnDeviceInferenceService extends GetxService {
       final mParams = ModelParams(
         gpuLayers: 0,
         contextSize: 2048,
-        numberOfThreads: 3, // Reduced to 3 to keep UI responsive
+        numberOfThreads: 3,
         batchSize: 64,
       );
 
@@ -144,58 +147,140 @@ class OnDeviceInferenceService extends GetxService {
     }
   }
 
-  Stream<String> respond(String userMessage, String systemPrompt, String domainName) async* {
+  /// Stream on-device inference tokens.
+  /// [fullPrompt] is the already-formatted Llama 3 prompt string built by InferenceRouter.
+  Stream<String> respond(
+      String userMessage, String fullPrompt, String domainName) async* {
     final currentPath = _settings.selectedModel.value;
     if (currentPath.isEmpty) {
       throw ModelNotDownloadedException("No model installed.");
     }
 
     try {
-      final ok = await _ensureInitialized(currentPath).timeout(const Duration(seconds: 300));
+      final ok = await _ensureInitialized(currentPath)
+          .timeout(const Duration(seconds: 300));
       if (!ok) throw Exception("Init failed.");
     } catch (e) {
       yield '⚠️ Failed to launch local engine: $e';
       return;
     }
 
-    final messages = [
-      {'role': 'system', 'content': systemPrompt},
-      {'role': 'user', 'content': userMessage},
-    ];
-
-    // Applying the prefix "Based on the provided text, " directly into the prompt
-    // to steer the 1B model towards grounding.
-    final assistantPrefix = 'Based on the provided text, ';
-    
-    // We construct the prompt manually to ensure the prefix is attached to the assistant role
-    final prompt = '<|im_start|>system\n$systemPrompt<|im_end|>\n<|im_start|>user\n$userMessage<|im_end|>\n<|im_start|>assistant\n$assistantPrefix';
-
+    // ── Inference parameters tuned to prevent repetition loops ──────────────
     final gParams = GenerationParams(
-      maxTokens: 300, 
-      temp: 0.0,
-      topP: 0.9,
-      topK: 40,
-      penalty: 1.1,
-      stopSequences: ['<|im_end|>', '<|endoftext|>'],
+      maxTokens: 256,
+      temp: 0.15,       // Non-zero prevents deterministic loops
+      topP: 0.85,
+      topK: 30,
+      penalty: 1.3,     // Aggressive repetition penalty
+      stopSequences: [
+        '<|eot_id|>',
+        '<|end_of_text|>',
+        '<|im_end|>',
+        '<|endoftext|>',
+        '\n\nQuestion:',
+        '\n\nQ:',
+        '\n\nContext:',
+      ],
     );
+
+    debugPrint('[LLM] Sending prompt (${fullPrompt.length} chars):\n'
+        '--- PROMPT START ---\n$fullPrompt\n--- PROMPT END ---');
 
     final responsePort = ReceivePort();
     _isolateSendPort!.send(IsolateRequest('generate', {
-      'prompt': prompt,
+      'prompt': fullPrompt,
       'params': gParams,
     }, responsePort.sendPort));
 
-    await for (final response in responsePort.map((r) => r as IsolateResponse)) {
+    String accumulatedRaw = '';
+
+    await for (final response
+        in responsePort.map((r) => r as IsolateResponse)) {
       if (response.isError) {
         yield '\n[Local AI Error: ${response.data}]';
         break;
       }
       if (response.isDone) break;
       if (response.data != null) {
+        accumulatedRaw += response.data as String;
         yield response.data as String;
       }
     }
     responsePort.close();
+  }
+
+  // ── Response Sanitizer ─────────────────────────────────────────────────────
+  /// Cleans the raw LLM output to remove loops, stop token leakage, and
+  /// duplicate lines. Call this AFTER streaming is complete.
+  static String sanitizeResponse(String raw) {
+    // 1. Strip leading "Based on the provided text," prefix if present
+    raw = raw.replaceFirst(
+        RegExp(r'^Based on the provided (text|context)[,.]?\s*',
+            caseSensitive: false),
+        '');
+
+    // 2. Cut at stop tokens that may have leaked into output
+    for (final stop in [
+      '<|eot_id|>',
+      '<|end_of_text|>',
+      '<|im_end|>',
+      '<|endoftext|>',
+      '\n\nQuestion:',
+      '\n\nQ:',
+      '\n\nContext:',
+    ]) {
+      final idx = raw.indexOf(stop);
+      if (idx != -1) {
+        debugPrint('[SANITIZER] Stop token found at $idx: "$stop" — truncating');
+        raw = raw.substring(0, idx);
+      }
+    }
+
+    // 3. Deduplicate repeated lines (the most common loop pattern)
+    final lines = raw.split('\n');
+    final seen = <String>{};
+    final deduped = <String>[];
+    for (final line in lines) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) {
+        deduped.add(line); // Preserve blank lines
+        continue;
+      }
+      if (!seen.contains(trimmed)) {
+        deduped.add(line);
+        seen.add(trimmed);
+      } else {
+        debugPrint('[SANITIZER] Duplicate line removed: "$trimmed"');
+      }
+    }
+    raw = deduped.join('\n');
+
+    // 4. Detect and truncate at the midpoint loop pattern
+    // e.g. "A home loan can be used... A home loan can be used..."
+    final words = raw.trim().split(RegExp(r'\s+'));
+    if (words.length > 40) {
+      final half = words.length ~/ 2;
+      final firstHalf = words.sublist(0, half).join(' ').toLowerCase();
+      final secondHalf = words.sublist(half).join(' ').toLowerCase();
+      // If second half begins with the same 8 words as first half → loop detected
+      final probe = words.sublist(0, 8).join(' ').toLowerCase();
+      if (secondHalf.contains(probe)) {
+        debugPrint(
+            '[SANITIZER] ⚠️ Mid-response loop detected — truncating at midpoint');
+        raw = words.sublist(0, half).join(' ');
+      }
+    }
+
+    // 5. Cap total length to prevent excessively long answers
+    if (raw.length > 1200) {
+      debugPrint('[SANITIZER] Response too long (${raw.length}) — capping at 1200 chars');
+      // Find last sentence boundary before cap
+      final cap = raw.substring(0, 1200);
+      final lastPeriod = cap.lastIndexOf(RegExp(r'[.!?]'));
+      raw = lastPeriod > 800 ? cap.substring(0, lastPeriod + 1) : cap;
+    }
+
+    return raw.trim();
   }
 
   Future<String?> validateModelFile(String path) async {
@@ -207,7 +292,8 @@ class OnDeviceInferenceService extends GetxService {
   }
 
   void cancelInference() {
-    _isolateSendPort?.send(IsolateRequest('cancel', null, ReceivePort().sendPort));
+    _isolateSendPort
+        ?.send(IsolateRequest('cancel', null, ReceivePort().sendPort));
   }
 
   void notifyDomainSwitch() {
@@ -219,14 +305,13 @@ class OnDeviceInferenceService extends GetxService {
       _disposeIsolate();
       _isInitialized = false;
       isModelReady.value = false;
-      
-      final dir = await getApplicationSupportDirectory(); // Using support dir as per common patterns
+
+      final dir = await getApplicationSupportDirectory();
       final modelDir = Directory('${dir.path}/models');
       if (await modelDir.exists()) {
         await modelDir.delete(recursive: true);
       }
-      
-      // Restart isolate for future use
+
       await _startIsolate();
     } catch (e) {
       debugPrint('Error clearing model cache: $e');

@@ -112,9 +112,12 @@ class ChatController extends GetxController {
     currentMessageState.value = MessageState.streaming;
 
     _currentSubscription = stream.listen(
-      (token) {
-        _responseBuffer.write(token);
-        currentResponseText.value = _responseBuffer.toString();
+      (fullContent) {
+        // The router yields full accumulated strings (especially for final validation),
+        // so we must replace the buffer content, not append it.
+        _responseBuffer.clear();
+        _responseBuffer.write(fullContent);
+        currentResponseText.value = fullContent;
         _scrollToBottom();
       },
       onDone: () async {

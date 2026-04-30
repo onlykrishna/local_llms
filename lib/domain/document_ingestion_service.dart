@@ -1,13 +1,20 @@
 import 'dart:io';
+import 'dart:math';
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
-import 'dart:math';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import '../core/embedding_service.dart';
+import 'package:hive/hive.dart' hide Box;
 import '../data/document_chunk.dart';
 import '../data/source_document.dart';
+import '../data/models/pdf_document_meta.dart';
+import '../core/constants/app_constants.dart';
 import 'kb_domain.dart';
-import '../objectbox.g.dart'; // From build_runner
+import '../objectbox.g.dart';
 
 class DocumentIngestionService extends GetxService {
   final Store store;
@@ -20,11 +27,79 @@ class DocumentIngestionService extends GetxService {
   DocumentIngestionService(this.store, this.embeddingService) {
     docBox = store.box<SourceDocument>();
     chunkBox = store.box<DocumentChunk>();
+    // Clean up any leftover temp_ files from previous crash during ingestion
+    _cleanupTempFiles();
   }
 
-  Future<void> ingestDocument(File file, KbDomain domain) async {
+  /// Deletes any temp_*.pdf files left in pdf_library/ from crashed sessions
+  /// AND purges their corresponding entries from ObjectBox.
+  Future<void> _cleanupTempFiles() async {
+    try {
+      final docsDir = await getApplicationDocumentsDirectory();
+      final libraryDir = Directory(p.join(docsDir.path, 'pdf_library'));
+      if (!await libraryDir.exists()) return;
+
+      // 1. Delete physical temp files
+      final tempFiles = await libraryDir
+          .list()
+          .where((f) {
+            final name = p.basename(f.path);
+            return name.startsWith('temp_') ||
+                   RegExp(r'^\d+_temp_').hasMatch(name);
+          })
+          .toList();
+      
+      for (final f in tempFiles) {
+        try {
+          await File(f.path).delete();
+          debugPrint('[Ingestion] Cleaned physical temp file: ${p.basename(f.path)}');
+        } catch (_) {}
+      }
+
+      // 2. Purge DB entries containing 'temp_' that are NOT indexed
+      final tempDocsQuery = docBox
+          .query(SourceDocument_.fileName.contains('_temp_'))
+          .build();
+      final tempDocs = tempDocsQuery.find();
+      
+      if (tempDocs.isNotEmpty) {
+        final libraryBox = Hive.box<PdfDocumentMeta>(AppConstants.pdfLibraryBoxName);
+        final indexedFileNames = libraryBox.values
+            .where((doc) => doc.status == 'indexed')
+            .map((doc) => p.basename(doc.internalPath))
+            .toSet();
+
+        for (final doc in tempDocs) {
+          if (!indexedFileNames.contains(doc.fileName)) {
+            debugPrint('[Ingestion] Purging ghost DB entry: ${doc.fileName}');
+            await deleteFromObjectBox(doc.fileName);
+            
+            // Also delete physical file if it exists and wasn't caught by the first pass
+            final f = File(doc.filePath);
+            if (await f.exists()) await f.delete();
+          }
+        }
+      }
+      tempDocsQuery.close();
+
+      final orphanTempChunksQuery = chunkBox
+          .query(DocumentChunk_.source.contains('_temp_'))
+          .build();
+      final orphanIds = orphanTempChunksQuery.findIds();
+      if (orphanIds.isNotEmpty) {
+        debugPrint('[Ingestion] Purging ${orphanIds.length} orphan temp chunks');
+        chunkBox.removeMany(orphanIds);
+      }
+      orphanTempChunksQuery.close();
+      
+    } catch (e) {
+      debugPrint('[Ingestion] Error cleaning temp files/DB: $e');
+    }
+  }
+
+  Future<({int pageCount, int chunkCount})> ingestDocument(File file, KbDomain domain) async {
     ingestionProgress.value = 0.0;
-    final fileName = file.path.split('/').last;
+    final fileName = p.basename(file.path);
 
     // STEP 1: New document ingestion
     final sourceDoc = SourceDocument(
@@ -63,42 +138,68 @@ class DocumentIngestionService extends GetxService {
 
       final List<DocumentChunk> validChunks = [];
       final int batchSize = 16;
-      
+
+      // Build a set of existing contentHashes to avoid duplicates
+      final existingHashes = chunkBox
+          .query(DocumentChunk_.sourceDocId.equals(docId))
+          .build()
+          .find()
+          .map((c) => c.contentHash)
+          .whereType<String>()
+          .toSet();
+      debugPrint('[Ingestion] Existing hashes for docId=$docId: ${existingHashes.length}');
+
       for (int i = 0; i < totalChunks; i += batchSize) {
         final end = (i + batchSize < totalChunks) ? i + batchSize : totalChunks;
         final batch = allChunks.sublist(i, end);
-        
-        final textsToEmbed = batch.map((c) => '${c.question} ${c.text}').toList();
-        final List<List<double>> embeddings = await embeddingService.embedBatch(textsToEmbed);
-        
-        for (int j = 0; j < batch.length; j++) {
+
+        // Filter duplicates before embedding (saves compute)
+        final uniqueBatch = batch.where((c) {
+          if (c.contentHash != null && existingHashes.contains(c.contentHash)) {
+            debugPrint('[Ingestion] Skipping duplicate chunk hash: ${c.contentHash}');
+            return false;
+          }
+          return true;
+        }).toList();
+
+        if (uniqueBatch.isEmpty) continue;
+
+        final textsToEmbed =
+            uniqueBatch.map((c) => '${c.question} ${c.text}').toList();
+        final List<List<double>> embeddings =
+            await embeddingService.embedBatch(textsToEmbed);
+
+        for (int j = 0; j < uniqueBatch.length; j++) {
           final vector = embeddings[j];
-          
-          // STEP 2: Validate embedding is not corrupted (norm should be ~1.0)
+
           double norm = 0;
           for (final v in vector) norm += v * v;
           norm = sqrt(norm);
-          
+
           if (norm < 0.5 || norm > 1.5) {
             debugPrint('[Ingestion] ⚠️ Bad embedding chunk $i+$j, norm=$norm, skipping');
             continue;
           }
 
-          // ✅ Store as List<double> explicitly
-          batch[j].embedding = vector.map((v) => v.toDouble()).toList();
-          validChunks.add(batch[j]);
-          
+          uniqueBatch[j].embedding = vector.map((v) => v.toDouble()).toList();
+          if (uniqueBatch[j].contentHash != null) {
+            existingHashes.add(uniqueBatch[j].contentHash!);
+          }
+          validChunks.add(uniqueBatch[j]);
+
           if (i + j < 5) {
-            debugPrint('[Ingestion] ✅ Chunk ${i + j}: norm=${norm.toStringAsFixed(3)} text="${batch[j].text.substring(0, min(30, batch[j].text.length))}..."');
+            debugPrint('[Ingestion] ✅ Chunk ${i + j}: norm=${norm.toStringAsFixed(3)} '
+                'hash=${uniqueBatch[j].contentHash?.substring(0, 8)} '
+                'text="${uniqueBatch[j].text.substring(0, min(30, uniqueBatch[j].text.length))}..."');
           }
         }
-        
-        chunkBox.putMany(batch);
-        debugPrint('[Ingestion] Saved batch of ${batch.length} chunks. Total so far: ${i + batch.length}');
-        
-        // Fix 4B: Prevent NaN in progress calculation
+
+        chunkBox.putMany(uniqueBatch);
+        debugPrint('[Ingestion] Saved ${uniqueBatch.length} unique chunks (batch $i–$end)');
+
         final progress = 0.5 + ((end / (totalChunks > 0 ? totalChunks : 1)) * 0.5);
-        ingestionProgress.value = progress.isNaN || progress.isInfinite ? 0.5 : progress;
+        ingestionProgress.value =
+            progress.isNaN || progress.isInfinite ? 0.5 : progress;
       }
 
       sourceDoc.status = 'ready';
@@ -107,6 +208,8 @@ class DocumentIngestionService extends GetxService {
       debugPrint('[Ingestion] Document ready: $fileName with ${validChunks.length} valid chunks in domain: ${domain.name}');
       ingestionProgress.value = 1.0;
 
+      return (pageCount: extractionResult.pageCount, chunkCount: validChunks.length);
+
     } catch (e) {
       sourceDoc.status = 'error';
       sourceDoc.errorMessage = e.toString();
@@ -114,6 +217,34 @@ class DocumentIngestionService extends GetxService {
       ingestionProgress.value = 0.0;
       rethrow;
     }
+  }
+
+  Future<String> copyFileToLibrary(File file) async {
+    final docsDir = await getApplicationDocumentsDirectory();
+    final libraryDir = Directory(p.join(docsDir.path, 'pdf_library'));
+    
+    if (!await libraryDir.exists()) {
+      await libraryDir.create(recursive: true);
+    }
+
+    final fileName = p.basename(file.path);
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final targetPath = p.join(libraryDir.path, '${timestamp}_$fileName');
+    
+    final copiedFile = await file.copy(targetPath);
+    return copiedFile.path;
+  }
+
+  Future<void> deleteFromObjectBox(String fileName) async {
+    final query = docBox.query(SourceDocument_.fileName.equals(fileName)).build();
+    final docs = query.find();
+    
+    for (final doc in docs) {
+      final chunkQuery = chunkBox.query(DocumentChunk_.sourceDocId.equals(doc.id)).build();
+      chunkBox.removeMany(chunkQuery.findIds());
+      docBox.remove(doc.id);
+    }
+    query.close();
   }
 
   String _cleanText(String text) {
@@ -258,6 +389,7 @@ _ExtractionResult _extractAndChunkInIsolate(Map<String, dynamic> params) {
       }
 
       final tags = DocumentIngestionService.detectAcronymTag(answer);
+      final contentHash = md5.convert(utf8.encode(answer)).toString();
 
       final chunk = DocumentChunk(
         sourceDocId: docId,
@@ -270,6 +402,7 @@ _ExtractionResult _extractAndChunkInIsolate(Map<String, dynamic> params) {
         source: fileName,
         createdAt: DateTime.now(),
         tags: tags,
+        contentHash: contentHash,
       );
       allChunks.add(chunk);
     }

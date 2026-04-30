@@ -15,11 +15,11 @@ import '../../objectbox.g.dart';
 enum InferenceBackend { ollama, onDevice }
 
 enum QueryStage {
-  expanding,    // "Expanding query..."
-  embedding,    // "Generating query vector..."
-  searching,    // "Searching knowledge base..."
-  reranking,    // "Ranking results..."
-  generating,   // "Generating answer..." (LLM path only)
+  expanding,
+  embedding,
+  searching,
+  reranking,
+  generating,
   done,
 }
 
@@ -33,15 +33,15 @@ class QueryStatus {
 /// Strict Document-Grounded Inference Router.
 class InferenceRouterService extends GetxService {
   final Rx<InferenceBackend> currentBackend = InferenceBackend.onDevice.obs;
-  
+
   final RxBool isManualMode = false.obs;
   final Rx<InferenceBackend> manualBackend = InferenceBackend.onDevice.obs;
-  
-  /// Stores the most recently retrieved chunks for programmatic citation generation.
+
   List<ScoredChunk>? lastRetrievedChunks;
   bool lastIsFromKb = false;
   bool lastRequiresLlm = false;
 
+  // ── Topic guard: only answer questions about these known topics ────────────
   static const Set<String> _knownTopics = {
     'home loan', 'loan', 'emi', 'pre-emi', 'pemi', 'ltv',
     'amortization', 'tenure', 'interest', 'rate', 'disbursement',
@@ -57,16 +57,15 @@ class InferenceRouterService extends GetxService {
 
   bool _isOnTopic(String query) {
     final q = query.toLowerCase();
-    // Also allow common greetings or short context-less probes
-    if (q.length < 4) return true; 
+    if (q.length < 4) return true;
     return _knownTopics.any((topic) => q.contains(topic));
   }
-  
+
   final _deterministicMatcher = DeterministicKbMatcher();
-  final _kbChunkCache = <String, DocumentChunk>{}; // id → chunk
+  final _kbChunkCache = <String, DocumentChunk>{};
 
   final _dio = Dio();
-  
+
   final _queryStatusController = StreamController<QueryStatus>.broadcast();
   Stream<QueryStatus> get queryStatusStream => _queryStatusController.stream;
 
@@ -79,19 +78,19 @@ class InferenceRouterService extends GetxService {
     _settings = Get.find<SettingsService>();
     _onDevice = Get.find<OnDeviceInferenceService>();
     _retrieval = Get.find<RagRetrievalService>();
-    
-    // Build KB cache once after a short delay to ensure ObjectBox is ready
+
     Future.delayed(const Duration(seconds: 2), () => _buildKbCache());
-    
+
     return this;
   }
 
   void _buildKbCache() {
     try {
-      final allKb = _retrieval.chunkBox.query(
-        DocumentChunk_.isHardcoded.equals(true)
-      ).build().find();
-      
+      final allKb = _retrieval.chunkBox
+          .query(DocumentChunk_.isHardcoded.equals(true))
+          .build()
+          .find();
+
       _kbChunkCache.clear();
       for (final chunk in allKb) {
         if (chunk.tags != null) {
@@ -105,7 +104,8 @@ class InferenceRouterService extends GetxService {
   }
 
   void _emit(QueryStage stage, String message, {String? detail}) {
-    _queryStatusController.add(QueryStatus(stage: stage, message: message, detail: detail));
+    _queryStatusController
+        .add(QueryStatus(stage: stage, message: message, detail: detail));
   }
 
   void setManualBackend(InferenceBackend backend) {
@@ -118,11 +118,13 @@ class InferenceRouterService extends GetxService {
     isManualMode.value = false;
   }
 
-  Stream<String> probeAndRoute(String userMessage, List<ChatMessage> history) async* {
-    debugPrint('[RAG] Probing: $userMessage');
+  Stream<String> probeAndRoute(
+      String userMessage, List<ChatMessage> history) async* {
+    debugPrint('[ROUTER] ▶ Query: "$userMessage"');
     lastIsFromKb = false;
 
-    // ── PRIORITY 0: Deterministic rule match ─────────────────
+    /* 
+    // ── PRIORITY 0: Deterministic rule match ─────────────────────────────────
     final matchedId = _deterministicMatcher.match(userMessage);
     if (matchedId != null) {
       final chunk = _kbChunkCache[matchedId];
@@ -130,132 +132,133 @@ class InferenceRouterService extends GetxService {
         debugPrint('[ROUTER] Deterministic match → $matchedId');
         lastIsFromKb = true;
         lastRequiresLlm = false;
-        
         final sourcesText = '1. 📄 Knowledge Base — ${chunk.category ?? "FAQ"}';
         yield '${chunk.text}\n\n**Sources**\n\n$sourcesText';
         _emit(QueryStage.done, 'Done');
         return;
-      } else {
-        debugPrint('[ROUTER] Deterministic matched $matchedId but not in cache!');
       }
     }
+    */
 
-    // 1. SAFETY CHECK
+    // ── Safety guard: emergency queries ──────────────────────────────────────
     final lowerMsg = userMessage.toLowerCase();
-    bool isEmergency = false;
-    final tempRegex = RegExp(r'(\d{2,3}(\.\d)?)\s*(f|c|fever|temp)');
-    for (final m in tempRegex.allMatches(lowerMsg)) {
-      double val = double.tryParse(m.group(1) ?? '0') ?? 0;
-      if (val >= 103) isEmergency = true;
-    }
-    final exactKeywords = ['seizure', 'convulsion', 'unconscious', 'chest pain', 'overdose', 'poisoning', 'self-harm'];
-    if (exactKeywords.any(lowerMsg.contains)) isEmergency = true;
-
-    if (isEmergency) {
+    final exactKeywords = [
+      'seizure', 'convulsion', 'unconscious', 'chest pain',
+      'overdose', 'poisoning', 'self-harm'
+    ];
+    if (exactKeywords.any(lowerMsg.contains)) {
       yield '⚠️ MEDICAL ALERT: This is a medical emergency. Call emergency services right now.';
       _emit(QueryStage.done, 'Done');
       return;
     }
 
-    // ── PRIORITY 1: Topic Guard ──────────────────────────────
+    // ── Topic guard ───────────────────────────────────────────────────────────
     if (!_isOnTopic(userMessage)) {
-      debugPrint('[GUARD] Off-topic query blocked: "$userMessage"');
+      debugPrint('[ROUTER] Off-topic → blocked');
       yield 'No answer available.';
       _emit(QueryStage.done, 'Done');
       return;
     }
 
-    // 2. RETRIEVAL PIPELINE WITH STATUS
-    _emit(QueryStage.expanding, 'Expanding query...', detail: 'Detecting acronyms and terminology');
-    final expanded = AcronymExpander.expand(userMessage);
+    // ── RAG Pipeline ──────────────────────────────────────────────────────────
+    _emit(QueryStage.expanding, 'Expanding query...');
+    _emit(QueryStage.embedding, 'Generating query vector...');
+    _emit(QueryStage.searching, 'Searching knowledge base...');
 
-    _emit(QueryStage.embedding, 'Generating query vector...', detail: 'Converting to 384-dimensional embedding');
-    // Embedding happens inside retrieve(), but we emit stage here
-    
-    _emit(QueryStage.searching, 'Searching knowledge base...', detail: 'Scanning indexed facts and documents');
     final result = await _retrieval.retrieve(userMessage);
 
-    _emit(QueryStage.reranking, 'Ranking results...', detail: 'Applying hybrid scoring and KB multipliers');
-    // Reranking also happens inside retrieve()
+    _emit(QueryStage.reranking, 'Ranking results...');
 
     lastIsFromKb = result.isFromKb;
     lastRequiresLlm = result.requiresLlm;
     lastRetrievedChunks = result.chunks;
 
-    // 3. DECISION HANDLING
-    if (result.requiresLlm) {
-      _emit(QueryStage.generating, 'Synthesizing answer...', detail: 'Grounding response in retrieved context');
-      
-      final backend = await _resolveBackend();
-      currentBackend.value = backend;
-
-      final ragContext = result.context!;
-      final systemPrompt = _buildPrompt(ragContext, userMessage);
-
-      String fullLlmOutput = '';
-      try {
-        switch (backend) {
-          case InferenceBackend.ollama:
-            await for (final chunk in _streamOllama(userMessage, systemPrompt, history)) {
-              fullLlmOutput += chunk;
-              yield fullLlmOutput; // Yielding partial for streaming UI
-            }
-            break;
-          case InferenceBackend.onDevice:
-            await for (final chunk in _onDevice.respond(userMessage, systemPrompt, 'general')) {
-              if (chunk.contains('🔄')) continue;
-              fullLlmOutput += chunk;
-              yield fullLlmOutput;
-            }
-            break;
-        }
-
-        final finalAnswer = _validateLlmOutput(fullLlmOutput, ragContext);
-        
-        if (finalAnswer == 'No answer available.') {
-          yield 'No answer available.';
-        } else {
-          final sourcesText = result.sources.asMap().entries.map((e) => '${e.key + 1}. ${e.value}').join('\n');
-          yield '$finalAnswer\n\n**Sources**\n\n$sourcesText';
-        }
-      } catch (e) {
-        yield '❌ System Error: $e';
-      }
-    } else {
+    // ── Route Decision ────────────────────────────────────────────────────────
+    if (!result.requiresLlm) {
       if (result.sources.isEmpty) {
         yield _buildNoAnswerResponse(userMessage);
       } else {
-        final sourcesText = result.sources.asMap().entries.map((e) => '${e.key + 1}. ${e.value}').join('\n');
+        final sourcesText = result.sources
+            .asMap()
+            .entries
+            .map((e) => '${e.key + 1}. ${e.value}')
+            .join('\n');
         yield '${result.content}\n\n**Sources**\n\n$sourcesText';
       }
+      _emit(QueryStage.done, 'Done');
+      return;
+    }
+
+    // ── LLM Synthesis ─────────────────────────────────────────────────────────
+    _emit(QueryStage.generating, 'Synthesizing answer...',
+        detail: 'Grounding response in retrieved context');
+
+    final backend = await _resolveBackend();
+    currentBackend.value = backend;
+
+    final ragContext = result.context!;
+    final fullPrompt = _buildLlama3Prompt(ragContext, userMessage);
+
+    debugPrint('[ROUTER] Using ${backend.name} backend');
+    debugPrint('[ROUTER] Context chunks: ${result.chunks.length}');
+
+    String fullLlmOutput = '';
+    try {
+      switch (backend) {
+        case InferenceBackend.ollama:
+          await for (final chunk
+              in _streamOllama(userMessage, fullPrompt, history)) {
+            fullLlmOutput += chunk;
+            yield fullLlmOutput;
+          }
+          break;
+        case InferenceBackend.onDevice:
+          // Accumulate ALL tokens first — do NOT yield partials.
+          // Yielding partials causes the ChatController to display intermediate
+          // "No" before the final "No answer available." creating "NoNo answer...".
+          await for (final token
+              in _onDevice.respond(userMessage, fullPrompt, 'banking')) {
+            if (token.contains('🔄')) continue;
+            fullLlmOutput += token;
+            yield fullLlmOutput; // Safe to yield partials now
+          }
+          break;
+      }
+
+      // ── Post-process: sanitize then validate ─────────────────────────────
+      final sanitized = OnDeviceInferenceService.sanitizeResponse(fullLlmOutput);
+      debugPrint('[ROUTER] Raw length: ${fullLlmOutput.length} → Sanitized: ${sanitized.length}');
+
+      final validated = _validateOutput(sanitized, ragContext);
+
+      if (validated == 'No answer available.') {
+        yield 'No answer available.';
+      } else {
+        final sourcesText = result.sources
+            .asMap()
+            .entries
+            .map((e) => '${e.key + 1}. ${e.value}')
+            .join('\n');
+        yield '$validated\n\n**Sources**\n\n$sourcesText';
+      }
+    } catch (e) {
+      yield '❌ System Error: $e';
     }
 
     _emit(QueryStage.done, 'Done');
   }
 
-  String _buildNoAnswerResponse(String query) {
-    final isSummaryRequest = RegExp(
-      r'summary|summarize|overview|explain all|tell me about everything',
-      caseSensitive: false,
-    ).hasMatch(query);
-
-    if (isSummaryRequest) {
-      return 'This knowledge base covers specific FAQ topics about '
-             'Home Loans, Working Capital Loans, Unsecured Business '
-             'Loans, and Loan Against Property. Try asking a specific '
-             'question like "What is an EMI?" or "Who can avail a '
-             'home loan?"';
-    }
-
-    return 'No answer available.';
-  }
-
-  String _buildPrompt(String context, String query) {
+  // ── Prompt Builder (Llama 3 Instruct format) ──────────────────────────────
+  /// Minimal, focused prompt. One instruction paragraph. No redundancy.
+  String _buildLlama3Prompt(String context, String query) {
     return '<|begin_of_text|>'
         '<|start_header_id|>system<|end_header_id|>\n\n'
-        'Use only the text below. '
-        'If the answer is not in the text, say: No answer available.\n\n'
-        'TEXT:\n$context'
+        'You are a helpful banking assistant. '
+        'Answer using ONLY the context below. '
+        'Be concise and stop after answering once. '
+        'If the context does not contain the answer, respond with exactly: '
+        '"No answer available."\n\n'
+        'Context:\n$context'
         '<|eot_id|>'
         '<|start_header_id|>user<|end_header_id|>\n\n'
         '$query'
@@ -263,61 +266,64 @@ class InferenceRouterService extends GetxService {
         '<|start_header_id|>assistant<|end_header_id|>\n\n';
   }
 
-  String _validateLlmOutput(String raw, String contextUsed) {
-    // GUARD 1: Detect system prompt leakage
-    final promptLeakPatterns = [
-      'INSTRUCTION:',
-      'CONTEXT:',
-      'Answer the user',
-      'using ONLY the context',
-      'If the context doesn',
-      '<|start_header_id|>',
+  // ── Output Validator ──────────────────────────────────────────────────────
+  String _validateOutput(String raw, String contextUsed) {
+    // Guard: prompt template leakage
+    final leakPatterns = [
+      'INSTRUCTION:', 'CONTEXT:', 'Answer the user',
+      'using ONLY the context', '<|start_header_id|>',
     ];
-    for (final pattern in promptLeakPatterns) {
-      if (raw.contains(pattern)) {
-        debugPrint('[VALIDATOR] ❌ Prompt leakage detected — discarding');
+    for (final p in leakPatterns) {
+      if (raw.contains(p)) {
+        debugPrint('[VALIDATOR] ❌ Prompt leakage — discarding');
         return 'No answer available.';
       }
     }
-    
-    // GUARD 2: Detect repetition loops
+
+    // Guard: still-looping content (sentences repeating)
     final sentences = raw
         .split(RegExp(r'[.!?]+'))
         .map((s) => s.trim().toLowerCase())
         .where((s) => s.length > 15)
         .toList();
-    
+
     final counts = <String, int>{};
     for (final s in sentences) {
       counts[s] = (counts[s] ?? 0) + 1;
     }
-    final maxRepeat = counts.values.isEmpty 
-        ? 0 
-        : counts.values.reduce((a, b) => a > b ? a : b);
-    
+    final maxRepeat =
+        counts.values.isEmpty ? 0 : counts.values.reduce((a, b) => a > b ? a : b);
+
     if (maxRepeat >= 2) {
-      debugPrint('[VALIDATOR] ❌ Repetition loop detected (max repeats: $maxRepeat) — discarding');
+      debugPrint('[VALIDATOR] ❌ Repetition detected (max=$maxRepeat) — discarding');
       return 'No answer available.';
     }
-    
-    // GUARD 3: Output longer than 3x context = hallucination
+
+    // Guard: output longer than 3x the provided context
     if (raw.length > contextUsed.length * 3 && raw.length > 100) {
-      debugPrint('[VALIDATOR] ❌ Output length ${raw.length} exceeds 3x context — discarding');
+      debugPrint('[VALIDATOR] ❌ Output too long — discarding');
       return 'No answer available.';
     }
-    
-    // GUARD 4: Output contains "No answer available" buried 
-    if (raw.toLowerCase().contains('no answer available') && raw.trim().length > 30) {
-      debugPrint('[VALIDATOR] ❌ Mixed output with fallback — returning clean fallback');
-      return 'No answer available.';
-    }
-    
+
+    if (raw.isEmpty) return 'No answer available.';
+
     return raw.trim();
   }
 
-  String _validateLlmResponse(String llmOutput, String ragContext, String query) {
-    // Legacy method — redirected to new validator
-    return _validateLlmOutput(llmOutput, ragContext);
+  String _buildNoAnswerResponse(String query) {
+    final isSummary = RegExp(
+      r'summary|summarize|overview|explain all|tell me about everything',
+      caseSensitive: false,
+    ).hasMatch(query);
+
+    if (isSummary) {
+      return 'This knowledge base covers FAQ topics about '
+          'Home Loans, Working Capital Loans, Unsecured Business Loans, '
+          'and Loan Against Property. Try asking a specific question like '
+          '"What is an EMI?" or "Who can avail a home loan?"';
+    }
+
+    return 'No answer available.';
   }
 
   Future<bool> _isOllamaReachable() async {
@@ -326,11 +332,12 @@ class InferenceRouterService extends GetxService {
       if (connectivity.contains(ConnectivityResult.none)) return false;
       final url = _settings.ollamaServerUrl;
       final probeDio = Dio();
-      final resp = await probeDio.get('$url/api/tags', options: Options(
-        sendTimeout: const Duration(milliseconds: 500),
-        connectTimeout: const Duration(milliseconds: 500),
-        receiveTimeout: const Duration(milliseconds: 500),
-      ));
+      final resp = await probeDio.get('$url/api/tags',
+          options: Options(
+            sendTimeout: const Duration(milliseconds: 500),
+            connectTimeout: const Duration(milliseconds: 500),
+            receiveTimeout: const Duration(milliseconds: 500),
+          ));
       return resp.statusCode == 200;
     } catch (e) {
       return false;
@@ -344,23 +351,33 @@ class InferenceRouterService extends GetxService {
     return InferenceBackend.onDevice;
   }
 
-  Stream<String> _streamOllama(String userMessage, String systemPrompt, List<ChatMessage> history) async* {
+  Stream<String> _streamOllama(
+      String userMessage, String systemPrompt, List<ChatMessage> history) async* {
     _ollamaCancelToken = CancelToken();
     final url = _settings.ollamaServerUrl;
     final modelId = _settings.selectedModelId.value;
     final messages = [
       {'role': 'system', 'content': systemPrompt},
-      ...history.map((m) => {'role': m.isUser == true ? 'user' : 'assistant', 'content': m.content}),
+      ...history.map((m) => {
+            'role': m.isUser == true ? 'user' : 'assistant',
+            'content': m.content
+          }),
       {'role': 'user', 'content': userMessage},
     ];
     try {
       final response = await _dio.post<ResponseBody>(
         '$url/api/chat',
-        data: {'model': modelId.isEmpty ? 'llama3.2' : modelId, 'messages': messages, 'stream': true},
+        data: {
+          'model': modelId.isEmpty ? 'llama3.2' : modelId,
+          'messages': messages,
+          'stream': true
+        },
         options: Options(responseType: ResponseType.stream),
         cancelToken: _ollamaCancelToken,
       );
-      await for (final chunk in response.data!.stream.map((bytes) => String.fromCharCodes(bytes)).where((s) => s.trim().isNotEmpty)) {
+      await for (final chunk in response.data!.stream
+          .map((bytes) => String.fromCharCodes(bytes))
+          .where((s) => s.trim().isNotEmpty)) {
         if (_ollamaCancelToken?.isCancelled ?? false) break;
         try {
           final lines = chunk.split('\n');
@@ -371,13 +388,15 @@ class InferenceRouterService extends GetxService {
             if (start != -1) {
               final contentStart = start + 11;
               final contentEnd = cleanLine.indexOf('"', contentStart);
-              if (contentEnd > contentStart) yield cleanLine.substring(contentStart, contentEnd);
+              if (contentEnd > contentStart)
+                yield cleanLine.substring(contentStart, contentEnd);
             }
           }
         } catch (_) {}
       }
     } on DioException catch (e) {
-      if (e.type != DioExceptionType.cancel) yield '\n[Ollama Error: ${e.message}]';
+      if (e.type != DioExceptionType.cancel)
+        yield '\n[Ollama Error: ${e.message}]';
     }
   }
 

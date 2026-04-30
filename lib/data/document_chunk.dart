@@ -47,6 +47,10 @@ class DocumentChunk {
   @Index()
   String? source;
 
+  /// MD5 hash of chunk text — used for deduplication at ingestion time
+  @Index()
+  String? contentHash;
+
   DocumentChunk({
     this.id = 0,
     required this.sourceDocId,
@@ -62,5 +66,6 @@ class DocumentChunk {
     this.tags,
     this.isHardcoded = false,
     this.category,
+    this.contentHash,
   });
 }

@@ -23,7 +23,7 @@ final _entities = <obx_int.ModelEntity>[
   obx_int.ModelEntity(
       id: const obx_int.IdUid(1, 7884252392149657579),
       name: 'DocumentChunk',
-      lastPropertyId: const obx_int.IdUid(14, 2021140859225169701),
+      lastPropertyId: const obx_int.IdUid(15, 1992521794481408431),
       flags: 0,
       properties: <obx_int.ModelProperty>[
         obx_int.ModelProperty(
@@ -106,7 +106,13 @@ final _entities = <obx_int.ModelEntity>[
             name: 'source',
             type: 9,
             flags: 2048,
-            indexId: const obx_int.IdUid(5, 2763821082024438808))
+            indexId: const obx_int.IdUid(5, 2763821082024438808)),
+        obx_int.ModelProperty(
+            id: const obx_int.IdUid(15, 1992521794481408431),
+            name: 'contentHash',
+            type: 9,
+            flags: 2048,
+            indexId: const obx_int.IdUid(6, 7271449708029904435))
       ],
       relations: <obx_int.ModelRelation>[],
       backlinks: <obx_int.ModelBacklink>[]),
@@ -202,7 +208,7 @@ obx_int.ModelDefinition getObjectBoxModel() {
   final model = obx_int.ModelInfo(
       entities: _entities,
       lastEntityId: const obx_int.IdUid(2, 4634653794525831309),
-      lastIndexId: const obx_int.IdUid(5, 2763821082024438808),
+      lastIndexId: const obx_int.IdUid(6, 7271449708029904435),
       lastRelationId: const obx_int.IdUid(0, 0),
       lastSequenceId: const obx_int.IdUid(0, 0),
       retiredEntityUids: const [],
@@ -237,7 +243,10 @@ obx_int.ModelDefinition getObjectBoxModel() {
               : fbb.writeString(object.category!);
           final sourceOffset =
               object.source == null ? null : fbb.writeString(object.source!);
-          fbb.startTable(15);
+          final contentHashOffset = object.contentHash == null
+              ? null
+              : fbb.writeString(object.contentHash!);
+          fbb.startTable(16);
           fbb.addInt64(0, object.id);
           fbb.addInt64(1, object.sourceDocId);
           fbb.addOffset(2, domainOffset);
@@ -252,6 +261,7 @@ obx_int.ModelDefinition getObjectBoxModel() {
           fbb.addBool(11, object.isHardcoded);
           fbb.addOffset(12, categoryOffset);
           fbb.addOffset(13, sourceOffset);
+          fbb.addOffset(14, contentHashOffset);
           fbb.finish(fbb.endTable());
           return object.id;
         },
@@ -288,6 +298,9 @@ obx_int.ModelDefinition getObjectBoxModel() {
               const fb.BoolReader().vTableGet(buffer, rootOffset, 26, false);
           final categoryParam = const fb.StringReader(asciiOptimization: true)
               .vTableGetNullable(buffer, rootOffset, 28);
+          final contentHashParam =
+              const fb.StringReader(asciiOptimization: true)
+                  .vTableGetNullable(buffer, rootOffset, 32);
           final object = DocumentChunk(
               id: idParam,
               sourceDocId: sourceDocIdParam,
@@ -302,7 +315,8 @@ obx_int.ModelDefinition getObjectBoxModel() {
               createdAt: createdAtParam,
               tags: tagsParam,
               isHardcoded: isHardcodedParam,
-              category: categoryParam);
+              category: categoryParam,
+              contentHash: contentHashParam);
 
           return object;
         }),
@@ -432,6 +446,10 @@ class DocumentChunk_ {
   /// See [DocumentChunk.source].
   static final source =
       obx.QueryStringProperty<DocumentChunk>(_entities[0].properties[13]);
+
+  /// See [DocumentChunk.contentHash].
+  static final contentHash =
+      obx.QueryStringProperty<DocumentChunk>(_entities[0].properties[14]);
 }
 
 /// [SourceDocument] entity fields to define ObjectBox queries.
