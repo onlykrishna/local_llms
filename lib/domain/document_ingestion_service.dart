@@ -285,6 +285,70 @@ class DocumentIngestionService extends GetxService {
     
     return null;
   }
+
+  Future<List<DocumentChunk>> ingestBytesWithTag({
+    required Uint8List bytes,
+    required String fileName,
+    required String sourceTag,
+  }) async {
+    debugPrint('[INGEST] Processing: $fileName (${bytes.length} bytes)');
+    
+    // Extract text from PDF bytes
+    final extractionResult = await compute(_extractAndChunkInIsolate, {
+      'bytes': bytes,
+      'fileName': fileName,
+      'domain': 'banking',
+      'docId': -2, // Special ID for bundled assets
+    });
+
+    final rawChunks = extractionResult.chunks;
+    debugPrint('[INGEST] Extracted ${rawChunks.length} chunks from $fileName');
+    
+    if (rawChunks.isEmpty) {
+      debugPrint('[INGEST] WARNING: Empty chunks from $fileName');
+      return [];
+    }
+    
+    // Generate embeddings
+    final List<DocumentChunk> embeddedChunks = [];
+    final int batchSize = 16;
+
+    for (int i = 0; i < rawChunks.length; i += batchSize) {
+      final end = (i + batchSize < rawChunks.length) ? i + batchSize : rawChunks.length;
+      final batch = rawChunks.sublist(i, end);
+      
+      final textsToEmbed = batch.map((c) => '${c.question} ${c.text}').toList();
+      try {
+        final List<List<double>> embeddings = await embeddingService.embedBatch(textsToEmbed);
+        
+        for (int j = 0; j < batch.length; j++) {
+          final chunk = batch[j];
+          chunk.embedding = embeddings[j];
+          chunk.sourceDocumentTag = sourceTag;
+          embeddedChunks.add(chunk);
+        }
+      } catch (e) {
+        debugPrint('[INGEST] Batch embedding failed at $i: $e');
+      }
+    }
+    
+    debugPrint('[INGEST] Generated ${embeddedChunks.length} embedded chunks for $fileName');
+    return embeddedChunks;
+  }
+
+  static String extractTag(String fileName) {
+    // 1777548342438_temp_home_loan_faqs.pdf -> home_loan_faqs
+    // home_loan_faqs.pdf -> home_loan_faqs
+    final name = p.basename(fileName);
+    String clean = name.toLowerCase().replaceAll('.pdf', '');
+    
+    final tempMatch = RegExp(r'^\d+_temp_(.*)$').firstMatch(clean);
+    if (tempMatch != null) {
+      clean = tempMatch.group(1)!;
+    }
+    
+    return clean.replaceAll(' ', '_');
+  }
 }
 
 /// Helper classes and functions for Isolate processing
@@ -400,6 +464,7 @@ _ExtractionResult _extractAndChunkInIsolate(Map<String, dynamic> params) {
         text: answer,
         sourceLabel: '$fileName, p.${i + 1}',
         source: fileName,
+        sourceDocumentTag: DocumentIngestionService.extractTag(fileName),
         createdAt: DateTime.now(),
         tags: tags,
         contentHash: contentHash,

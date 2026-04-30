@@ -9,6 +9,7 @@ import '../rag_retrieval_service.dart';
 import '../entities/chat_message.dart';
 import '../../data/document_chunk.dart';
 import 'acronym_expander.dart';
+import 'fuzzy_query_corrector.dart';
 import '../deterministic_kb_matcher.dart';
 import '../../objectbox.g.dart';
 
@@ -119,8 +120,15 @@ class InferenceRouterService extends GetxService {
   }
 
   Stream<String> probeAndRoute(
-      String userMessage, List<ChatMessage> history) async* {
-    debugPrint('[ROUTER] ▶ Query: "$userMessage"');
+      String rawUserMessage, List<ChatMessage> history) async* {
+    debugPrint('[RAG] Original query: "$rawUserMessage"');
+    
+    // Step 1: Fuzzy correction
+    final userMessage = FuzzyQueryCorrector.correct(rawUserMessage);
+    if (userMessage != rawUserMessage.toLowerCase()) {
+      debugPrint('[RAG] Corrected query: "$userMessage"');
+    }
+
     lastIsFromKb = false;
 
     /* 
@@ -168,6 +176,16 @@ class InferenceRouterService extends GetxService {
     final result = await _retrieval.retrieve(userMessage);
 
     _emit(QueryStage.reranking, 'Ranking results...');
+
+    // Extract diagnostic info for logs
+    final topChunk = result.chunks.isNotEmpty ? result.chunks.first : null;
+    final topScore = topChunk?.score ?? 0.0;
+    
+    print('[ROUTER-DIAG] Chunks retrieved: ${result.chunks.length}');
+    if (topChunk != null) {
+      print('[ROUTER-DIAG] Top score: ${topScore.toStringAsFixed(3)}');
+    }
+    print('[ROUTER-DIAG] Requires LLM: ${result.requiresLlm}');
 
     lastIsFromKb = result.isFromKb;
     lastRequiresLlm = result.requiresLlm;
@@ -253,11 +271,8 @@ class InferenceRouterService extends GetxService {
   String _buildLlama3Prompt(String context, String query) {
     return '<|begin_of_text|>'
         '<|start_header_id|>system<|end_header_id|>\n\n'
-        'You are a helpful banking assistant. '
-        'Answer using ONLY the context below. '
-        'Be concise and stop after answering once. '
-        'If the context does not contain the answer, respond with exactly: '
-        '"No answer available."\n\n'
+        'Answer the question based ONLY on the provided context. '
+        'If you cannot find the answer, say "No answer available."\n\n'
         'Context:\n$context'
         '<|eot_id|>'
         '<|start_header_id|>user<|end_header_id|>\n\n'
@@ -305,7 +320,18 @@ class InferenceRouterService extends GetxService {
       return 'No answer available.';
     }
 
-    if (raw.isEmpty) return 'No answer available.';
+    if (raw.isEmpty || raw.toLowerCase().contains('no answer available')) {
+      // ── HEURISTIC FALLBACK ────────────────────────────────────────────────
+      // If the LLM refused but we had strong chunks, don't show the refusal.
+      if (lastRetrievedChunks != null && lastRetrievedChunks!.isNotEmpty) {
+        final top = lastRetrievedChunks!.first;
+        if (top.score >= 0.5) {
+          debugPrint('[VALIDATOR] 🛡️ LLM refused but Top Score is ${top.score}. Falling back to Top Chunk.');
+          return top.chunk.text.trim();
+        }
+      }
+      return 'No answer available.';
+    }
 
     return raw.trim();
   }

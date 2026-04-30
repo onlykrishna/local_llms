@@ -1,3 +1,5 @@
+// CRITICAL: After any change to this entity, you MUST run:
+// dart run build_runner build --delete-conflicting-outputs
 import 'package:objectbox/objectbox.dart';
 
 @Entity()
@@ -6,21 +8,21 @@ class DocumentChunk {
   int id = 0;
   
   @Index()
-  int sourceDocId;
+  int sourceDocId = 0;
   
   @Index()
-  String domain;
+  String domain = '';
   
-  int chunkIndex;
-  int pageNumber;
+  int chunkIndex = 0;
+  int pageNumber = 0;
   
   /// The FAQ question or header text (used for retrieval scoring)
-  String question;
+  String question = '';
   
   /// The actual answer or body text (used for LLM context)
-  String text;
+  String text = '';
   
-  String sourceLabel;
+  String sourceLabel = '';
   
   @HnswIndex(
     dimensions: 384,
@@ -32,7 +34,7 @@ class DocumentChunk {
   List<double>? embedding;
   
   @Property(type: PropertyType.date)
-  DateTime createdAt;
+  DateTime? createdAt;
 
   /// Comma-separated tags or acronyms for exact match boosting
   @Index()
@@ -49,23 +51,27 @@ class DocumentChunk {
 
   /// MD5 hash of chunk text — used for deduplication at ingestion time
   @Index()
-  String? contentHash;
+  String contentHash = '';
+
+  @Index()
+  String sourceDocumentTag = ''; // Default value for smooth migration
 
   DocumentChunk({
     this.id = 0,
-    required this.sourceDocId,
-    required this.domain,
-    required this.chunkIndex,
-    required this.pageNumber,
+    this.sourceDocId = 0,
+    this.domain = '',
+    this.chunkIndex = 0,
+    this.pageNumber = 0,
     this.question = '',
-    required this.text,
-    required this.sourceLabel,
+    this.text = '',
+    this.sourceLabel = '',
     this.source,
     this.embedding,
-    required this.createdAt,
+    this.createdAt,
     this.tags,
     this.isHardcoded = false,
     this.category,
-    this.contentHash,
+    this.contentHash = '',
+    this.sourceDocumentTag = '',
   });
 }
