@@ -145,7 +145,7 @@ class DocumentIngestionService extends GetxService {
           .build()
           .find()
           .map((c) => c.contentHash)
-          .whereType<String>()
+          .where((h) => h.isNotEmpty)
           .toSet();
       debugPrint('[Ingestion] Existing hashes for docId=$docId: ${existingHashes.length}');
 
@@ -155,8 +155,8 @@ class DocumentIngestionService extends GetxService {
 
         // Filter duplicates before embedding (saves compute)
         final uniqueBatch = batch.where((c) {
-          if (c.contentHash != null && existingHashes.contains(c.contentHash)) {
-            debugPrint('[Ingestion] Skipping duplicate chunk hash: ${c.contentHash}');
+          if (c.contentHash.isNotEmpty && existingHashes.contains(c.contentHash)) {
+            debugPrint('[Ingestion] Skipping duplicate chunk: ${c.contentHash.substring(0, 8)}');
             return false;
           }
           return true;

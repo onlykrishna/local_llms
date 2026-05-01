@@ -121,12 +121,11 @@ class InferenceRouterService extends GetxService {
 
   Stream<String> probeAndRoute(
       String rawUserMessage, List<ChatMessage> history) async* {
-    debugPrint('[RAG] Original query: "$rawUserMessage"');
-    
-    // Step 1: Fuzzy correction
-    final userMessage = FuzzyQueryCorrector.correct(rawUserMessage);
-    if (userMessage != rawUserMessage.toLowerCase()) {
-      debugPrint('[RAG] Corrected query: "$userMessage"');
+    // Step 1: Fuzzy correction — correctedQuery used for BOTH retrieval AND LLM
+    final correctedQuery = FuzzyQueryCorrector.correct(rawUserMessage);
+    print('[ROUTER] Original query: "$rawUserMessage"');
+    if (correctedQuery != rawUserMessage.toLowerCase().trim()) {
+      print('[ROUTER] Corrected query: "$correctedQuery"');
     }
 
     lastIsFromKb = false;
@@ -149,7 +148,7 @@ class InferenceRouterService extends GetxService {
     */
 
     // ── Safety guard: emergency queries ──────────────────────────────────────
-    final lowerMsg = userMessage.toLowerCase();
+    final lowerMsg = correctedQuery.toLowerCase();
     final exactKeywords = [
       'seizure', 'convulsion', 'unconscious', 'chest pain',
       'overdose', 'poisoning', 'self-harm'
@@ -161,7 +160,7 @@ class InferenceRouterService extends GetxService {
     }
 
     // ── Topic guard ───────────────────────────────────────────────────────────
-    if (!_isOnTopic(userMessage)) {
+    if (!_isOnTopic(correctedQuery)) {
       debugPrint('[ROUTER] Off-topic → blocked');
       yield 'No answer available.';
       _emit(QueryStage.done, 'Done');
@@ -173,28 +172,40 @@ class InferenceRouterService extends GetxService {
     _emit(QueryStage.embedding, 'Generating query vector...');
     _emit(QueryStage.searching, 'Searching knowledge base...');
 
-    final result = await _retrieval.retrieve(userMessage);
+    final result = await _retrieval.retrieve(correctedQuery);
 
     _emit(QueryStage.reranking, 'Ranking results...');
 
-    // Extract diagnostic info for logs
     final topChunk = result.chunks.isNotEmpty ? result.chunks.first : null;
     final topScore = topChunk?.score ?? 0.0;
     
-    print('[ROUTER-DIAG] Chunks retrieved: ${result.chunks.length}');
+    print('[ROUTER] Chunks retrieved: ${result.chunks.length}');
     if (topChunk != null) {
-      print('[ROUTER-DIAG] Top score: ${topScore.toStringAsFixed(3)}');
+      print('[ROUTER] Top score: ${topScore.toStringAsFixed(3)}');
     }
-    print('[ROUTER-DIAG] Requires LLM: ${result.requiresLlm}');
+    print('[ROUTER] Requires LLM: ${result.requiresLlm}');
+    print('[ROUTER] Intent: ${result.intent}');
 
     lastIsFromKb = result.isFromKb;
     lastRequiresLlm = result.requiresLlm;
     lastRetrievedChunks = result.chunks;
 
+    // ── Direct bypass for definition-type queries ──────────────────────────
+    if (result.intent == QueryIntent.definition &&
+        topChunk != null &&
+        topScore >= 0.50 &&
+        topChunk.chunk.text.length > 50) {
+      print('[ROUTER] Direct bypass triggered → returning chunk text for definition query');
+      final sourcesText = result.sources.asMap().entries.map((e) => '${e.key + 1}. ${e.value}').join('\n');
+      yield '${_cleanChunkText(topChunk.chunk.text)}\n\n**Sources**\n\n$sourcesText';
+      _emit(QueryStage.done, 'Done');
+      return;
+    }
+
     // ── Route Decision ────────────────────────────────────────────────────────
     if (!result.requiresLlm) {
       if (result.sources.isEmpty) {
-        yield _buildNoAnswerResponse(userMessage);
+        yield _buildNoAnswerResponse(correctedQuery);
       } else {
         final sourcesText = result.sources
             .asMap()
@@ -215,7 +226,9 @@ class InferenceRouterService extends GetxService {
     currentBackend.value = backend;
 
     final ragContext = result.context!;
-    final fullPrompt = _buildLlama3Prompt(ragContext, userMessage);
+    // FIX: Use correctedQuery (not originalQuery) for the LLM prompt
+    print('[ROUTER] Using corrected query for LLM: "$correctedQuery"');
+    final fullPrompt = _buildLlama3Prompt(ragContext, correctedQuery);
 
     debugPrint('[ROUTER] Using ${backend.name} backend');
     debugPrint('[ROUTER] Context chunks: ${result.chunks.length}');
@@ -225,20 +238,17 @@ class InferenceRouterService extends GetxService {
       switch (backend) {
         case InferenceBackend.ollama:
           await for (final chunk
-              in _streamOllama(userMessage, fullPrompt, history)) {
+              in _streamOllama(correctedQuery, fullPrompt, history)) {
             fullLlmOutput += chunk;
             yield fullLlmOutput;
           }
           break;
         case InferenceBackend.onDevice:
-          // Accumulate ALL tokens first — do NOT yield partials.
-          // Yielding partials causes the ChatController to display intermediate
-          // "No" before the final "No answer available." creating "NoNo answer...".
           await for (final token
-              in _onDevice.respond(userMessage, fullPrompt, 'banking')) {
+              in _onDevice.respond(correctedQuery, fullPrompt, 'banking')) {
             if (token.contains('🔄')) continue;
             fullLlmOutput += token;
-            yield fullLlmOutput; // Safe to yield partials now
+            yield fullLlmOutput;
           }
           break;
       }
@@ -271,14 +281,23 @@ class InferenceRouterService extends GetxService {
   String _buildLlama3Prompt(String context, String query) {
     return '<|begin_of_text|>'
         '<|start_header_id|>system<|end_header_id|>\n\n'
-        'Answer the question based ONLY on the provided context. '
-        'If you cannot find the answer, say "No answer available."\n\n'
+        'You are a helpful loan assistant. '
+        'Answer ONLY from the context provided. '
+        'Be direct and concise. Do not repeat yourself. '
+        'If context does not contain the answer, say exactly: "No answer available."\n\n'
         'Context:\n$context'
         '<|eot_id|>'
         '<|start_header_id|>user<|end_header_id|>\n\n'
-        '$query'
+        'Question: $query'
         '<|eot_id|>'
         '<|start_header_id|>assistant<|end_header_id|>\n\n';
+  }
+
+  String _cleanChunkText(String raw) {
+    return raw
+        .replaceAll(RegExp(r'[■●•▪︎➤]'), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
   }
 
   // ── Output Validator ──────────────────────────────────────────────────────
