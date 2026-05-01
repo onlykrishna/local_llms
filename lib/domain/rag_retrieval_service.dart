@@ -1,5 +1,5 @@
 import 'dart:math';
-
+import 'package:flutter/foundation.dart';
 import 'package:get/get.dart' hide Condition;
 import '../core/embedding_service.dart';
 import '../data/document_chunk.dart';
@@ -45,13 +45,28 @@ class RagResult {
     this.intent = QueryIntent.other,
   });
 
-  factory RagResult.directBypass(String content, List<String> sources, List<ScoredChunk> chunks, {bool isFromKb = false, QueryIntent intent = QueryIntent.other}) =>
-      RagResult(requiresLlm: false, content: content, sources: sources, chunks: chunks, isFromKb: isFromKb, intent: intent);
+  factory RagResult.directBypass(String content, List<String> sources, List<ScoredChunk> chunks,
+          {bool isFromKb = false, QueryIntent intent = QueryIntent.other}) =>
+      RagResult(
+          requiresLlm: false,
+          content: content,
+          sources: sources,
+          chunks: chunks,
+          isFromKb: isFromKb,
+          intent: intent);
 
-  factory RagResult.llmGrounded(String context, List<String> sources, List<ScoredChunk> chunks, {QueryIntent intent = QueryIntent.other}) =>
-      RagResult(requiresLlm: true, content: '', context: context, sources: sources, chunks: chunks, intent: intent);
+  factory RagResult.llmGrounded(String context, List<String> sources, List<ScoredChunk> chunks,
+          {QueryIntent intent = QueryIntent.other}) =>
+      RagResult(
+          requiresLlm: true,
+          content: '',
+          context: context,
+          sources: sources,
+          chunks: chunks,
+          intent: intent);
 
-  factory RagResult.noAnswer() => RagResult(requiresLlm: false, content: 'No answer available.', sources: [], chunks: []);
+  factory RagResult.noAnswer() =>
+      RagResult(requiresLlm: false, content: 'No answer available.', sources: [], chunks: []);
 }
 
 class RagRetrievalService extends GetxService {
@@ -59,42 +74,30 @@ class RagRetrievalService extends GetxService {
   final EmbeddingService embeddingService;
   late final Box<DocumentChunk> chunkBox;
 
+  // ── Document scope map ────────────────────────────────────────────────────
   static const Map<String, String> _documentScope = {
     'home loan': 'home_loan_faqs',
     'working capital': 'working_capital_loan_faqs',
     'unsecured': 'unsecured_business_loan_faqs',
     'business loan': 'unsecured_business_loan_faqs',
     'lap': 'loan_against_property_faqs',
+    'loan against property': 'loan_against_property_faqs',
     'property loan': 'loan_against_property_faqs',
   };
 
-  // ── Mandatory keywords per intent ──────────────────────────────────────────
-  static const Map<QueryIntent, List<String>> _mandatoryKeywords = {
+  // ── Intent keyword BOOSTS (additive only — never block answers) ───────────
+  static const Map<QueryIntent, List<String>> _intentKeywords = {
     QueryIntent.documents: [
       'kyc', 'pan', 'aadhaar', 'bank statement', 'itr',
       'document', 'proof', 'identity', 'address',
-      'financial statement', 'gst', 'balance sheet',
-      'passport', 'photograph', 'application form', 'form',
+      'gst', 'balance sheet', 'passport', 'photograph', 'form',
     ],
-    QueryIntent.fees: [
-      'fee', 'charge', 'processing', 'cost', 'payment', 'applicable',
-    ],
-    QueryIntent.eligibility: [
-      'age', 'income', 'salary', 'cibil', 'score',
-      'eligible', 'criteria', 'minimum', 'maximum',
-    ],
-    QueryIntent.interest: [
-      '%', 'percent', 'rate', 'interest', 'roi', 'pa',
-    ],
-    QueryIntent.tenure: [
-      'tenure', 'year', 'month', 'duration', 'period', 'repay',
-    ],
-    QueryIntent.definition: [
-      'loan', 'used', 'purpose', 'means', 'refers', 'is a', 'are',
-    ],
-    QueryIntent.process: [
-      'apply', 'process', 'step', 'procedure', 'how', 'application',
-    ],
+    QueryIntent.fees: ['fee', 'charge', 'processing', 'cost', 'payment', 'applicable'],
+    QueryIntent.eligibility: ['age', 'income', 'salary', 'cibil', 'score', 'eligible', 'criteria'],
+    QueryIntent.interest: ['%', 'percent', 'rate', 'interest', 'roi', 'pa'],
+    QueryIntent.tenure: ['tenure', 'year', 'month', 'duration', 'period', 'repay'],
+    QueryIntent.definition: ['loan', 'used', 'purpose', 'means', 'refers', 'is a'],
+    QueryIntent.process: ['apply', 'process', 'step', 'procedure', 'how', 'application'],
     QueryIntent.other: [],
   };
 
@@ -105,18 +108,15 @@ class RagRetrievalService extends GetxService {
   // ── Intent Detection ───────────────────────────────────────────────────────
   QueryIntent detectIntent(String query) {
     final q = query.toLowerCase();
-    if (q.contains('document') || q.contains('paper') ||
-        q.contains('require') || q.contains('need') ||
-        q.contains('submit') || q.contains('kyc') ||
-        q.contains('what documents') || q.contains('which documents')) {
+    if (q.contains('document') || q.contains('paper') || q.contains('kyc') ||
+        q.contains('what documents') || q.contains('which documents') ||
+        q.contains('require') || (q.contains('need') && q.contains('loan'))) {
       return QueryIntent.documents;
     }
-    if (q.contains('fee') || q.contains('charge') ||
-        q.contains('cost') || q.contains('processing')) {
+    if (q.contains('fee') || q.contains('charge') || q.contains('cost') || q.contains('processing')) {
       return QueryIntent.fees;
     }
-    if (q.contains('eligib') || q.contains('qualify') ||
-        q.contains('criteria') || q.contains('who can')) {
+    if (q.contains('eligib') || q.contains('qualify') || q.contains('criteria') || q.contains('who can')) {
       return QueryIntent.eligibility;
     }
     if (q.contains('interest') || q.contains(' rate') || q.contains('roi')) {
@@ -128,35 +128,42 @@ class RagRetrievalService extends GetxService {
     if (q.contains('how to apply') || q.contains('process') || q.contains('steps')) {
       return QueryIntent.process;
     }
-    if (q.contains('what is') || q.contains('define') ||
-        q.contains('meaning') || q.contains('explain')) {
+    if (q.contains('what is') || q.contains('define') || q.contains('meaning') || q.contains('explain')) {
       return QueryIntent.definition;
     }
     return QueryIntent.other;
   }
 
-  // ── Intent-based Re-ranking ────────────────────────────────────────────────
-  List<ScoredChunk> _reRankByIntent(List<ScoredChunk> chunks, QueryIntent intent) {
-    if (intent == QueryIntent.other) return chunks;
-    final keywords = _mandatoryKeywords[intent] ?? [];
-    if (keywords.isEmpty) return chunks;
-
-    final matching = chunks.where((c) {
-      final text = (c.chunk.text + ' ' + c.chunk.question).toLowerCase();
-      return keywords.any((kw) => text.contains(kw));
-    }).toList();
-
-    if (matching.isNotEmpty) {
-      print('[RAG] Intent: $intent → Found ${matching.length} keyword-matching chunks');
-      return matching;
+  // ── Header/Title Chunk Detection ───────────────────────────────────────────
+  // Header chunks (like "HOME LOAN FAQ HOME LOAN FAQ") have no useful content.
+  bool _isHeaderChunk(String text) {
+    final t = text.trim();
+    if (t.length < 40) return true; // Too short to be an answer
+    if (t == t.toUpperCase() && t.length < 100) return true; // ALL CAPS short text
+    // Detect repeated content (e.g. "Foo Bar Foo Bar")
+    if (t.length > 20) {
+      final half = t.substring(0, t.length ~/ 2).trim();
+      if (half.length > 10 && t.contains(half) &&
+          t.indexOf(half) != t.lastIndexOf(half)) {
+        return true;
+      }
     }
-
-    print('[RAG] Intent: $intent → No chunks match mandatory keywords → returning all for fallback');
-    // Return all instead of empty to avoid false "no answer" — let threshold decide
-    return chunks;
+    return false;
   }
 
-  // ── Deduplication ──────────────────────────────────────────────────────────
+  // ── Keyword boost (ADDITIVE only — keywords never block answers) ───────────
+  double _computeKeywordBoost(String chunkText, QueryIntent intent) {
+    if (intent == QueryIntent.other) return 1.0;
+    final text = chunkText.toLowerCase();
+    final keywords = _intentKeywords[intent] ?? [];
+    final matches = keywords.where((k) => text.contains(k)).length;
+    if (matches == 0) return 1.0;   // no boost — answer is NOT blocked
+    if (matches == 1) return 1.20;
+    if (matches == 2) return 1.35;
+    return 1.50;                    // strong boost for 3+ keyword matches
+  }
+
+  // ── Deduplication by contentHash ──────────────────────────────────────────
   List<ScoredChunk> _deduplicateChunks(List<ScoredChunk> chunks) {
     final seen = <String>{};
     final unique = <ScoredChunk>[];
@@ -168,7 +175,7 @@ class RagRetrievalService extends GetxService {
         seen.add(key);
         unique.add(sc);
       } else {
-        print('[RAG] Duplicate chunk removed: ${key.substring(0, min(30, key.length))}');
+        debugPrint('[RAG] Duplicate chunk removed: ${key.substring(0, min(30, key.length))}');
       }
     }
     print('[RAG] After dedup: ${unique.length} (removed ${chunks.length - unique.length} duplicates)');
@@ -188,6 +195,11 @@ class RagRetrievalService extends GetxService {
     print('[RAG] Total chunks in DB: $totalChunks');
     print('[RAG] Raw Query: $rawQuery');
 
+    if (totalChunks == 0) {
+      print('[RAG] ERROR: ObjectBox is EMPTY');
+      return RagResult.noAnswer();
+    }
+
     final typoCorrected = FuzzyQueryCorrector.correct(rawQuery);
     final expanded = AcronymExpander.expand(typoCorrected);
     final resolvedScope = resolveDocumentScope(typoCorrected);
@@ -201,50 +213,54 @@ class RagRetrievalService extends GetxService {
     }
     print('[RAG] Intent detected: $intent');
 
-    if (totalChunks == 0) {
-      print('[RAG] ERROR: ObjectBox is EMPTY');
-      return RagResult.noAnswer();
+    // ── Step 1: Scoped vector search ────────────────────────────────────────
+    final scopedChunks = await _vectorSearch(expanded, resolvedScope, 40);
+    print('[RAG] Raw results: ${scopedChunks.length}');
+
+    // ── Step 2: If too few scoped results, try broader unscoped search ──────
+    List<ScoredChunk> allCandidates = scopedChunks;
+    if (scopedChunks.length < 2 && resolvedScope != null) {
+      print('[RAG] Too few scoped chunks (${scopedChunks.length}) → trying broader unscoped search');
+      final broader = await _vectorSearch(expanded, null, 20);
+      // Merge and deduplicate
+      final combined = [...scopedChunks, ...broader];
+      allCandidates = combined;
+      print('[RAG] Broader search added ${broader.length} chunks (total: ${allCandidates.length})');
     }
 
-    final queryEmbedding = await embeddingService.embed(expanded);
+    if (allCandidates.isEmpty) return RagResult.noAnswer();
 
-    // ── Vector Query ───────────────────────────────────────────────────────
-    Condition<DocumentChunk> condition = DocumentChunk_.embedding.nearestNeighborsF32(queryEmbedding, 40);
-    if (resolvedScope != null) {
-      condition = condition.and(DocumentChunk_.sourceDocumentTag.contains(resolvedScope));
-    }
-    final dbQuery = chunkBox.query(condition).build();
-    final rawResults = dbQuery.findWithScores();
-    dbQuery.close();
+    // ── Step 3: Filter header/title chunks ──────────────────────────────────
+    final contentChunks = allCandidates.where((sc) => !_isHeaderChunk(sc.chunk.text)).toList();
+    print('[RAG] Filtered ${allCandidates.length - contentChunks.length} header/title chunks');
 
-    print('[RAG] Raw results: ${rawResults.length}');
+    // Fall back to all chunks if header filter removed everything
+    final candidates = contentChunks.isNotEmpty ? contentChunks : allCandidates;
 
-    if (rawResults.isEmpty) return RagResult.noAnswer();
+    // ── Step 4: Deduplicate ─────────────────────────────────────────────────
+    final deduped = _deduplicateChunks(candidates);
+    if (deduped.isEmpty) return RagResult.noAnswer();
 
-    // ── Score ──────────────────────────────────────────────────────────────
-    final scored = rawResults.map((result) {
-      final chunk = result.object;
-      final emb = chunk.embedding;
-      double cosine = (emb != null && emb.isNotEmpty)
-          ? _cosineSimilarity(queryEmbedding, emb)
-          : (1.0 - result.score);
-      final kwBoost = _computeKeywordBoost(chunk.text + ' ' + chunk.question, expanded);
-      final tagBoost = _tagBoost(chunk, expanded);
-      double score = (cosine * 0.45) * kwBoost + (tagBoost * 0.20);
-      if (chunk.isHardcoded) score *= 1.5;
-      return ScoredChunk(chunk: chunk, score: score, cosine: cosine, kw: kwBoost, boost: tagBoost);
+    // ── Step 5: Apply keyword BOOST (additive only — never blocks answers) ──
+    final boosted = deduped.map((sc) {
+      final kwBoost = _computeKeywordBoost(sc.chunk.text, intent);
+      final tagBoost = _tagBoost(sc.chunk, typoCorrected);
+      final newScore = sc.score * kwBoost + tagBoost;
+      return ScoredChunk(
+          chunk: sc.chunk, score: newScore, cosine: sc.cosine, kw: kwBoost, boost: tagBoost);
     }).toList();
 
-    // ── Deduplicate ────────────────────────────────────────────────────────
-    final deduped = _deduplicateChunks(scored);
-    deduped.sort((a, b) => b.score.compareTo(a.score));
+    boosted.sort((a, b) => b.score.compareTo(a.score));
 
-    // ── Intent Re-ranking ──────────────────────────────────────────────────
-    final reRanked = _reRankByIntent(deduped, intent);
-    if (reRanked.isEmpty) return RagResult.noAnswer();
-    reRanked.sort((a, b) => b.score.compareTo(a.score));
+    // Log top 3 for debugging
+    for (int i = 0; i < min(3, boosted.length); i++) {
+      final c = boosted[i];
+      print('[RAG] Score: ${c.score.toStringAsFixed(3)} | ${c.chunk.text.substring(0, min(60, c.chunk.text.length))}');
+    }
 
-    final top = reRanked.first;
+    final top = boosted.first;
+
+    // ── Step 6: Threshold check ─────────────────────────────────────────────
     final threshold = resolvedScope != null ? 0.25 : 0.40;
     print('[RAG] Top score: ${top.score.toStringAsFixed(3)} | Threshold: $threshold | Match: ${top.score >= threshold}');
 
@@ -253,32 +269,60 @@ class RagRetrievalService extends GetxService {
       return RagResult.noAnswer();
     }
 
-    // ── High-confidence Direct Bypass ──────────────────────────────────────
-    final double bypassThreshold = resolvedScope != null ? 0.65 : 0.85;
+    // ── Step 7: High-confidence bypass → serve directly ────────────────────
+    final bypassThreshold = resolvedScope != null ? 0.65 : 0.85;
     if (top.score >= bypassThreshold) {
       print('[RAG] → HIGH CONFIDENCE BYPASS (score ${top.score.toStringAsFixed(2)})');
       return RagResult.directBypass(
         _sanitizeChunk(top.chunk.text),
-        _buildUniqueSources(reRanked.take(3).toList()),
-        reRanked.take(3).toList(),
+        _buildUniqueSources(boosted.take(3).toList()),
+        boosted.take(3).toList(),
         isFromKb: top.chunk.isHardcoded,
         intent: intent,
       );
     }
 
-    // ── LLM Grounding ──────────────────────────────────────────────────────
-    final selected = reRanked.where((s) => s.score >= threshold).take(3).toList();
-    final context = selected.map((s) => _sanitizeChunk(s.chunk.text)).join('\n\n');
+    // ── Step 8: LLM grounding with top 3 content chunks ────────────────────
+    final selected = boosted.where((s) => s.score >= threshold).take(3).toList();
+    // Filter out empty/whitespace chunks from LLM context
+    final validSelected = selected.where((s) => s.chunk.text.trim().length > 20).toList();
+    final context = validSelected.map((s) => _sanitizeChunk(s.chunk.text)).join('\n\n');
+
+    print('[RAG] Final chunks: ${validSelected.length}');
 
     return RagResult.llmGrounded(
       context,
-      _buildUniqueSources(selected),
-      selected,
+      _buildUniqueSources(validSelected),
+      validSelected,
       intent: intent,
     );
   }
 
-  /// Build unique source citations — no duplicates from same page
+  // ── Internal: vector search helper ────────────────────────────────────────
+  Future<List<ScoredChunk>> _vectorSearch(String query, String? scope, int limit) async {
+    final queryEmbedding = await embeddingService.embed(query);
+
+    Condition<DocumentChunk> condition = DocumentChunk_.embedding.nearestNeighborsF32(queryEmbedding, limit);
+    if (scope != null) {
+      condition = condition.and(DocumentChunk_.sourceDocumentTag.contains(scope));
+    }
+
+    final dbQuery = chunkBox.query(condition).build();
+    final results = dbQuery.findWithScores();
+    dbQuery.close();
+
+    return results.map((result) {
+      final chunk = result.object;
+      final emb = chunk.embedding;
+      final cosine = (emb != null && emb.isNotEmpty)
+          ? _cosineSimilarity(queryEmbedding, emb)
+          : (1.0 - result.score);
+      double score = cosine * 0.45;
+      if (chunk.isHardcoded) score *= 1.5;
+      return ScoredChunk(chunk: chunk, score: score, cosine: cosine, kw: 1.0, boost: 0.0);
+    }).toList();
+  }
+
   List<String> _buildUniqueSources(List<ScoredChunk> chunks) {
     final seen = <String>{};
     final sources = <String>[];
@@ -292,28 +336,9 @@ class RagRetrievalService extends GetxService {
     return sources;
   }
 
-  double _computeKeywordBoost(String chunkText, String query) {
-    double boost = 1.0;
-    final qLower = query.toLowerCase();
-    final cLower = chunkText.toLowerCase();
-    for (final intent in {
-      'documents': ['document', 'paper', 'require', 'kyc', 'proof'],
-      'eligibility': ['eligible', 'criteria', 'qualify', 'income'],
-      'interest': ['interest', 'rate', 'roi'],
-      'emi': ['emi', 'monthly', 'installment'],
-      'tenure': ['tenure', 'year', 'month'],
-    }.entries) {
-      if (qLower.contains(intent.key)) {
-        final matches = intent.value.where((kw) => cLower.contains(kw)).length;
-        if (matches > 0) boost += (matches * 0.25);
-      }
-    }
-    return boost.clamp(0.5, 3.0);
-  }
-
   double _tagBoost(DocumentChunk chunk, String query) {
     if (chunk.tags == null) return 0.0;
-    return query.toLowerCase().contains(chunk.tags!.toLowerCase()) ? 0.5 : 0.0;
+    return query.toLowerCase().contains(chunk.tags!.toLowerCase()) ? 0.05 : 0.0;
   }
 
   String _formatSource(DocumentChunk chunk) {

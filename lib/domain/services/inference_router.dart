@@ -279,13 +279,24 @@ class InferenceRouterService extends GetxService {
   // ── Prompt Builder (Llama 3 Instruct format) ──────────────────────────────
   /// Minimal, focused prompt. One instruction paragraph. No redundancy.
   String _buildLlama3Prompt(String context, String query) {
+    // Filter empty lines from context before sending to LLM
+    final cleanContext = context
+        .split('\n')
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty)
+        .join('\n');
+
+    if (cleanContext.isEmpty) {
+      print('[ROUTER] WARNING: Empty context after cleaning');
+    }
+
     return '<|begin_of_text|>'
         '<|start_header_id|>system<|end_header_id|>\n\n'
         'You are a helpful loan assistant. '
         'Answer ONLY from the context provided. '
         'Be direct and concise. Do not repeat yourself. '
-        'If context does not contain the answer, say exactly: "No answer available."\n\n'
-        'Context:\n$context'
+        'If context does not contain the answer, say exactly: No answer available.\n\n'
+        'Context:\n$cleanContext'
         '<|eot_id|>'
         '<|start_header_id|>user<|end_header_id|>\n\n'
         'Question: $query'
@@ -301,58 +312,66 @@ class InferenceRouterService extends GetxService {
   }
 
   // ── Output Validator ──────────────────────────────────────────────────────
+  // RULES: Only discard if prompt leaked into output, or sentences are looping.
+  // NEVER discard based on response length — a 390-char answer is perfectly valid.
   String _validateOutput(String raw, String contextUsed) {
-    // Guard: prompt template leakage
+    // Guard 1: Stop-token cleanup (strip everything after model stop tokens)
+    const stopTokens = ['<|eot_id|>', '<|end_of_text|>', '<|im_end|>', '[/INST]'];
+    String cleaned = raw;
+    for (final stop in stopTokens) {
+      if (cleaned.contains(stop)) {
+        cleaned = cleaned.substring(0, cleaned.indexOf(stop));
+      }
+    }
+    cleaned = cleaned.trim();
+
+    // Guard 2: Prompt template leakage
     final leakPatterns = [
       'INSTRUCTION:', 'CONTEXT:', 'Answer the user',
       'using ONLY the context', '<|start_header_id|>',
     ];
     for (final p in leakPatterns) {
-      if (raw.contains(p)) {
+      if (cleaned.contains(p)) {
         debugPrint('[VALIDATOR] ❌ Prompt leakage — discarding');
-        return 'No answer available.';
+        return _heuristicFallback();
       }
     }
 
-    // Guard: still-looping content (sentences repeating)
-    final sentences = raw
+    // Guard 3: Sentence-level repetition loops
+    final sentences = cleaned
         .split(RegExp(r'[.!?]+'))
         .map((s) => s.trim().toLowerCase())
         .where((s) => s.length > 15)
         .toList();
-
     final counts = <String, int>{};
     for (final s in sentences) {
       counts[s] = (counts[s] ?? 0) + 1;
     }
-    final maxRepeat =
-        counts.values.isEmpty ? 0 : counts.values.reduce((a, b) => a > b ? a : b);
-
-    if (maxRepeat >= 2) {
-      debugPrint('[VALIDATOR] ❌ Repetition detected (max=$maxRepeat) — discarding');
-      return 'No answer available.';
+    final maxRepeat = counts.values.isEmpty ? 0 : counts.values.reduce((a, b) => a > b ? a : b);
+    if (maxRepeat >= 3) {
+      debugPrint('[VALIDATOR] ❌ Repetition loop detected (max=$maxRepeat) — discarding');
+      return _heuristicFallback();
     }
 
-    // Guard: output longer than 3x the provided context
-    if (raw.length > contextUsed.length * 3 && raw.length > 100) {
-      debugPrint('[VALIDATOR] ❌ Output too long — discarding');
-      return 'No answer available.';
+    // Guard 4: LLM explicitly says no answer
+    if (cleaned.isEmpty || cleaned.toLowerCase().contains('no answer available')) {
+      debugPrint('[VALIDATOR] LLM said no answer — trying heuristic fallback');
+      return _heuristicFallback();
     }
 
-    if (raw.isEmpty || raw.toLowerCase().contains('no answer available')) {
-      // ── HEURISTIC FALLBACK ────────────────────────────────────────────────
-      // If the LLM refused but we had strong chunks, don't show the refusal.
-      if (lastRetrievedChunks != null && lastRetrievedChunks!.isNotEmpty) {
-        final top = lastRetrievedChunks!.first;
-        if (top.score >= 0.5) {
-          debugPrint('[VALIDATOR] 🛡️ LLM refused but Top Score is ${top.score}. Falling back to Top Chunk.');
-          return top.chunk.text.trim();
-        }
+    debugPrint('[VALIDATOR] ✅ Answer accepted (${cleaned.length} chars)');
+    return cleaned;
+  }
+
+  String _heuristicFallback() {
+    if (lastRetrievedChunks != null && lastRetrievedChunks!.isNotEmpty) {
+      final top = lastRetrievedChunks!.first;
+      if (top.score >= 0.4) {
+        debugPrint('[VALIDATOR] 🛡️ Falling back to top chunk (score=${top.score.toStringAsFixed(2)})');
+        return _cleanChunkText(top.chunk.text);
       }
-      return 'No answer available.';
     }
-
-    return raw.trim();
+    return 'No answer available.';
   }
 
   String _buildNoAnswerResponse(String query) {

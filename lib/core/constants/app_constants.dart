@@ -10,7 +10,7 @@ class AppConstants {
 
   // Hive boxes
   static const String chatBoxName = 'chat_history';
-  static const String kbVersion = 'v1.6';
+  static const String kbVersion = 'v1.7';
   static const String settingsBoxName = 'settings';
   static const String downloadBoxName = 'download_history';
   static const String pdfLibraryBoxName = 'pdf_library';
