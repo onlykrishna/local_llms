@@ -43,26 +43,26 @@ class AppDrawer extends StatelessWidget {
                     Get.to(() => const HistoryPage());
                   },
                 ),
-                _DrawerItem(
-                  icon: Icons.folder_shared_rounded,
-                  label: 'PDF Library',
-                  subtitle: 'View indexed documents',
-                  color: theme.colorScheme.primary,
-                  onTap: () {
-                    Get.back();
-                    Get.to(() => const PdfLibraryPage());
-                  },
-                ),
-                _DrawerItem(
-                  icon: Icons.library_books_rounded,
-                  label: 'Knowledge Base',
-                  subtitle: 'Manage document context',
-                  color: theme.colorScheme.tertiary,
-                  onTap: () {
-                    Get.back();
-                    Get.to(() => const KbManagerPage());
-                  },
-                ),
+                // _DrawerItem(
+                //   icon: Icons.folder_shared_rounded,
+                //   label: 'PDF Library',
+                //   subtitle: 'View indexed documents',
+                //   color: theme.colorScheme.primary,
+                //   onTap: () {
+                //     Get.back();
+                //     Get.to(() => const PdfLibraryPage());
+                //   },
+                // ),
+                // _DrawerItem(
+                //   icon: Icons.library_books_rounded,
+                //   label: 'Knowledge Base',
+                //   subtitle: 'Manage document context',
+                //   color: theme.colorScheme.tertiary,
+                //   onTap: () {
+                //     Get.back();
+                //     Get.to(() => const KbManagerPage());
+                //   },
+                // ),
                 // _DrawerItem(
                 //   icon: Icons.settings_rounded,
                 //   label: 'Global Settings',
