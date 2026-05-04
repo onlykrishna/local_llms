@@ -62,6 +62,63 @@ class InferenceRouterService extends GetxService {
     return _knownTopics.any((topic) => q.contains(topic));
   }
 
+  bool _chunkAnswersQuery(String queryLower, DocumentChunk chunk) {
+    final chunkLower = chunk.text.toLowerCase();
+    
+    // Simple subject extraction: remove question words
+    final questionWords = ['what', 'is', 'are', 'how', 'does', 'do', 'can', 
+                           'tell', 'me', 'about', 'explain', 'define', 'a', 
+                           'the', 'for', 'of', 'in'];
+    final queryWords = queryLower.split(RegExp(r'\W+'))
+        .where((w) => w.length > 2 && !questionWords.contains(w))
+        .toList();
+    
+    if (queryWords.isEmpty) return true;
+    
+    // Check keyword match ratio
+    int matchCount = queryWords.where((w) => chunkLower.contains(w)).length;
+    double matchRatio = matchCount / queryWords.length;
+    if (matchRatio < 0.6) return false;
+
+    // DEFINITION INTENT BLOCK
+    final isDefinitionQuery = queryLower.contains('what is') || 
+                              queryLower.contains('define') || 
+                              queryLower.contains('meaning') ||
+                              queryLower.contains('stands for');
+
+    if (isDefinitionQuery) {
+      final definitionalIndicators = [
+        'stands for',
+        'is defined as',
+        'abbreviated as',
+        'refers to',
+        'full form',
+        'short for',
+      ];
+      
+      bool foundUnambiguousDefinition = false;
+      for (final subject in queryWords) {
+        final subjectPos = chunkLower.indexOf(subject);
+        if (subjectPos == -1) continue;
+        
+        for (final indicator in definitionalIndicators) {
+          final indicatorPos = chunkLower.indexOf(indicator);
+          if (indicatorPos == -1) continue;
+          
+          // Use 80 chars proximity as requested
+          if ((subjectPos - indicatorPos).abs() <= 80) {
+            foundUnambiguousDefinition = true;
+            break;
+          }
+        }
+        if (foundUnambiguousDefinition) break;
+      }
+      return foundUnambiguousDefinition;
+    }
+    
+    return true;
+  }
+
   final _deterministicMatcher = DeterministicKbMatcher();
   final _kbChunkCache = <String, DocumentChunk>{};
 
@@ -191,31 +248,59 @@ class InferenceRouterService extends GetxService {
     lastRetrievedChunks = result.chunks;
 
     // ── Direct bypass for definition-type queries ──────────────────────────
+    bool bypassSuccess = false;
     if (result.intent == QueryIntent.definition &&
         topChunk != null &&
         topScore >= 0.50 &&
         topChunk.chunk.text.length > 50) {
-      print('[ROUTER] Direct bypass triggered → returning chunk text for definition query');
-      final sourcesText = result.sources.asMap().entries.map((e) => '${e.key + 1}. ${e.value}').join('\n');
-      yield '${_cleanChunkText(topChunk.chunk.text)}\n\n**Sources**\n\n$sourcesText';
+      if (_chunkAnswersQuery(correctedQuery, topChunk.chunk)) {
+        print('[ROUTER] Direct bypass triggered → returning chunk text for definition query');
+        final sourcesText = _buildSourcesBlock(result.chunks.map((sc) => sc.chunk).toList());
+        yield '${_cleanChunkText(topChunk.chunk.text)}$sourcesText';
+        bypassSuccess = true;
+      } else {
+        // Chunk doesn't answer it — check chunks 2 and 3
+        for (final chunk in result.chunks.skip(1)) {
+          if (_chunkAnswersQuery(correctedQuery, chunk.chunk)) {
+            print('[ROUTER] Found relevant definition in chunk ${result.chunks.indexOf(chunk) + 1}');
+            final sourcesText = _buildSourcesBlock([chunk.chunk]);
+            yield '${_cleanChunkText(chunk.chunk.text)}$sourcesText';
+            bypassSuccess = true;
+            break;
+          }
+        }
+      }
+      
+      if (bypassSuccess) {
+        _emit(QueryStage.done, 'Done');
+        return;
+      }
+      print('[ROUTER] Definition bypass failed relevance check → falling through to LLM');
+    }
+
+    // ── Route Decision ────────────────────────────────────────────────────────
+    if (!result.contextSufficient) {
+      yield 'This information is not available in the provided documents.';
       _emit(QueryStage.done, 'Done');
       return;
     }
 
-    // ── Route Decision ────────────────────────────────────────────────────────
-    if (!result.requiresLlm) {
-      if (result.sources.isEmpty) {
-        yield _buildNoAnswerResponse(correctedQuery);
+    bool requiresLlm = result.requiresLlm;
+    if (!requiresLlm) {
+      // Path A bypass check
+      if (topChunk != null && _chunkAnswersQuery(correctedQuery, topChunk.chunk)) {
+        if (result.sources.isEmpty) {
+          yield _buildNoAnswerResponse(correctedQuery);
+        } else {
+          final sourcesText = _buildSourcesBlock(result.chunks.map((sc) => sc.chunk).toList());
+          yield '${result.content}$sourcesText';
+        }
+        _emit(QueryStage.done, 'Done');
+        return;
       } else {
-        final sourcesText = result.sources
-            .asMap()
-            .entries
-            .map((e) => '${e.key + 1}. ${e.value}')
-            .join('\n');
-        yield '${result.content}\n\n**Sources**\n\n$sourcesText';
+        print('[ROUTER] Path A bypass failed relevance check → falling through to LLM');
+        requiresLlm = true;
       }
-      _emit(QueryStage.done, 'Done');
-      return;
     }
 
     // ── LLM Synthesis ─────────────────────────────────────────────────────────
@@ -225,7 +310,16 @@ class InferenceRouterService extends GetxService {
     final backend = await _resolveBackend();
     currentBackend.value = backend;
 
-    final ragContext = result.context!;
+    // Use the context from result (which we now ensure exists even for bypass)
+    final int contextLimit = (result.intent == QueryIntent.definition) ? result.chunks.length : 3;
+    final contextChunks = result.chunks.take(contextLimit).toList();
+    final ragContext = contextChunks.map((s) => _cleanChunkText(s.chunk.text)).join('\n---\n');
+
+    if (ragContext.isEmpty) {
+      yield 'This information is not available in the provided documents.';
+      _emit(QueryStage.done, 'Done');
+      return;
+    }
     // FIX: Use correctedQuery (not originalQuery) for the LLM prompt
     print('[ROUTER] Using corrected query for LLM: "$correctedQuery"');
     final fullPrompt = _buildLlama3Prompt(ragContext, correctedQuery);
@@ -257,17 +351,14 @@ class InferenceRouterService extends GetxService {
       final sanitized = OnDeviceInferenceService.sanitizeResponse(fullLlmOutput);
       debugPrint('[ROUTER] Raw length: ${fullLlmOutput.length} → Sanitized: ${sanitized.length}');
 
-      final validated = _validateOutput(sanitized, ragContext);
+      final validated = _validateOutput(sanitized, result, correctedQuery);
 
       if (validated == 'No answer available.') {
-        yield 'No answer available.';
+        yield 'This information is not available in the provided documents.';
       } else {
-        final sourcesText = result.sources
-            .asMap()
-            .entries
-            .map((e) => '${e.key + 1}. ${e.value}')
-            .join('\n');
-        yield '$validated\n\n**Sources**\n\n$sourcesText';
+        final usedChunks = lastRetrievedChunks?.map((sc) => sc.chunk).toList() ?? [];
+        final sourcesText = _buildSourcesBlock(usedChunks);
+        yield '$validated$sourcesText';
       }
     } catch (e) {
       yield '❌ System Error: $e';
@@ -292,14 +383,33 @@ class InferenceRouterService extends GetxService {
 
     return '<|begin_of_text|>'
         '<|start_header_id|>system<|end_header_id|>\n\n'
-        'You are a helpful loan assistant. '
-        'Answer ONLY from the context provided. '
-        'Be direct and concise. Do not repeat yourself. '
-        'If context does not contain the answer, say exactly: No answer available.\n\n'
-        'Context:\n$cleanContext'
+        'You are a document answer extractor. You will be given context passages retrieved from \n'
+        'official PDF documents. Your ONLY job is to answer the user\'s question using information \n'
+        'explicitly present in the provided context. \n'
+        'Rules you must follow without exception:\n'
+        '- ONLY use information from the <context> blocks below.\n'
+        '- If the context contains PARTIAL information relevant to the question, \n'
+        '  provide that partial information clearly stating it is from the documents.\n'
+        '- If the context contains ZERO relevant information, respond with exactly:\n'
+        '  \'This information is not available in the provided documents.\'\n'
+        '- Do NOT refuse to answer if ANY relevant information exists in context.\n'
+        '- Do NOT use your training knowledge, general knowledge, or make inferences.\n'
+        '- Do NOT add explanations, examples, or elaborations beyond what the context states.\n'
+        '- Do NOT say phrases like \'Based on my knowledge\' or \'Generally speaking\'.\n'
+        '- Quote or closely paraphrase the context. Do not invent numbers, dates, or conditions.\n'
         '<|eot_id|>'
         '<|start_header_id|>user<|end_header_id|>\n\n'
-        'Question: $query'
+        'STRICT INSTRUCTION: Only answer from the context below. \n'
+        'Context is from official PDFs. No outside knowledge allowed.\n'
+        'If the context does not contain the answer, say: \n'
+        '\'This information is not available in the provided documents.\'\n\n'
+        '<context>\n'
+        '$cleanContext\n'
+        '</context>\n\n'
+        'Question: $query\n'
+        'Important: If the context contains any information related to the question, \n'
+        'use it. Only say not available if context has zero relevant content.\n'
+        'Answer (from context only):'
         '<|eot_id|>'
         '<|start_header_id|>assistant<|end_header_id|>\n\n';
   }
@@ -314,10 +424,10 @@ class InferenceRouterService extends GetxService {
   // ── Output Validator ──────────────────────────────────────────────────────
   // RULES: Only discard if prompt leaked into output, or sentences are looping.
   // NEVER discard based on response length — a 390-char answer is perfectly valid.
-  String _validateOutput(String raw, String contextUsed) {
+  String _validateOutput(String output, RagResult ragResult, String correctedQuery) {
     // Guard 1: Stop-token cleanup (strip everything after model stop tokens)
     const stopTokens = ['<|eot_id|>', '<|end_of_text|>', '<|im_end|>', '[/INST]'];
-    String cleaned = raw;
+    String cleaned = output;
     for (final stop in stopTokens) {
       if (cleaned.contains(stop)) {
         cleaned = cleaned.substring(0, cleaned.indexOf(stop));
@@ -333,7 +443,7 @@ class InferenceRouterService extends GetxService {
     for (final p in leakPatterns) {
       if (cleaned.contains(p)) {
         debugPrint('[VALIDATOR] ❌ Prompt leakage — discarding');
-        return _heuristicFallback();
+        return _heuristicFallback(ragResult, correctedQuery);
       }
     }
 
@@ -350,28 +460,103 @@ class InferenceRouterService extends GetxService {
     final maxRepeat = counts.values.isEmpty ? 0 : counts.values.reduce((a, b) => a > b ? a : b);
     if (maxRepeat >= 3) {
       debugPrint('[VALIDATOR] ❌ Repetition loop detected (max=$maxRepeat) — discarding');
-      return _heuristicFallback();
+      return _heuristicFallback(ragResult, correctedQuery);
     }
 
     // Guard 4: LLM explicitly says no answer
-    if (cleaned.isEmpty || cleaned.toLowerCase().contains('no answer available')) {
+    if (cleaned.isEmpty || cleaned.toLowerCase().contains('no answer available') || cleaned.toLowerCase().contains('not available in the provided documents')) {
       debugPrint('[VALIDATOR] LLM said no answer — trying heuristic fallback');
-      return _heuristicFallback();
+      return _heuristicFallback(ragResult, correctedQuery);
+    }
+
+    // Hallucination leak check — catch self-referential LLM language
+    final hallucinationPhrases = [
+      'based on my knowledge',
+      'generally speaking',
+      'typically',
+      'in most cases',
+      'as an ai',
+      'i believe',
+      'you should consult',
+      'please note that',
+      'it is important to',
+    ];
+    final lowerOutput = cleaned.toLowerCase();
+    for (final phrase in hallucinationPhrases) {
+      if (lowerOutput.contains(phrase)) {
+        // LLM leaked self-generated content — fall back to raw chunk
+        return _heuristicFallback(ragResult, correctedQuery);
+      }
+    }
+
+    // Grounding check — verify output contains at least one key term from ANY chunk
+    final outputWords = cleaned.toLowerCase()
+        .split(RegExp(r'\W+'))
+        .where((w) => w.length > 4)
+        .toSet();
+    
+    bool hasGrounding = false;
+    for (final chunk in ragResult.chunks) {
+      final chunkWords = chunk.chunk.text
+          .toLowerCase()
+          .split(RegExp(r'\W+'))
+          .where((w) => w.length > 4)
+          .toSet();
+      final overlap = chunkWords.intersection(outputWords).length;
+      if (overlap >= 3) {
+        hasGrounding = true;
+        break;
+      }
+    }
+    
+    if (!hasGrounding) {
+      debugPrint('[VALIDATOR] ❌ No grounding overlap with ANY chunk — discarding');
+      return _heuristicFallback(ragResult, correctedQuery);
     }
 
     debugPrint('[VALIDATOR] ✅ Answer accepted (${cleaned.length} chars)');
     return cleaned;
   }
 
-  String _heuristicFallback() {
-    if (lastRetrievedChunks != null && lastRetrievedChunks!.isNotEmpty) {
-      final top = lastRetrievedChunks!.first;
-      if (top.score >= 0.4) {
-        debugPrint('[VALIDATOR] 🛡️ Falling back to top chunk (score=${top.score.toStringAsFixed(2)})');
-        return _cleanChunkText(top.chunk.text);
+  String _heuristicFallback(RagResult ragResult, String correctedQuery) {
+    final queryLower = correctedQuery.toLowerCase();
+    
+    // Extract subject words
+    const stopWords = {'what', 'is', 'are', 'how', 'does', 'do', 'can',
+                       'tell', 'me', 'about', 'explain', 'define', 
+                       'a', 'the', 'for', 'of', 'in', 'an', 'and'};
+    final subjectWords = queryLower
+        .split(RegExp(r'\W+'))
+        .where((w) => w.length > 1 && !stopWords.contains(w))
+        .toList();
+    
+    // Step 1: find a chunk that contains ALL subject words
+    for (final chunk in ragResult.chunks) {
+      final chunkLower = chunk.chunk.text.toLowerCase();
+      if (subjectWords.every((w) => chunkLower.contains(w))) {
+        return _cleanChunkText(chunk.chunk.text);
       }
     }
-    return 'No answer available.';
+    
+    // Step 2: find a chunk containing MOST subject words (60%)
+    for (final chunk in ragResult.chunks) {
+      final chunkLower = chunk.chunk.text.toLowerCase();
+      final matchCount = subjectWords
+          .where((w) => chunkLower.contains(w)).length;
+      if (subjectWords.isEmpty || 
+          matchCount / subjectWords.length >= 0.6) {
+        return _cleanChunkText(chunk.chunk.text);
+      }
+    }
+    
+    // Step 3: return top chunk text directly (better than "not available"
+    // when we know context exists)
+    if (ragResult.chunks.isNotEmpty) {
+      final top = ragResult.chunks.first;
+      return _cleanChunkText(top.chunk.text);
+    }
+    
+    return 'This information is not available in the provided documents.';
   }
 
   String _buildNoAnswerResponse(String query) {
@@ -387,7 +572,42 @@ class InferenceRouterService extends GetxService {
           '"What is an EMI?" or "Who can avail a home loan?"';
     }
 
-    return 'No answer available.';
+    return 'This information is not available in the provided documents.';
+  }
+
+  String _buildSourcesBlock(List<DocumentChunk> chunks) {
+    if (chunks.isEmpty) return '';
+    
+    String _toFilename(String? source) {
+      if (source == null) return 'document.pdf';
+      final s = source.toLowerCase().trim();
+      if (s.contains('home_loan') || s.contains('home loan'))
+        return 'home_loan_faqs.pdf';
+      if (s.contains('working_capital') || s.contains('working capital'))
+        return 'working_capital_loan_faqs.pdf';
+      if (s.contains('loan_against') || s.contains('loan against'))
+        return 'loan_against_property_faqs.pdf';
+      if (s.contains('unsecured') || s.contains('business'))
+        return 'unsecured_business_loan_faqs.pdf';
+      if (s.endsWith('.pdf')) return source;
+      return 'knowledge_base.pdf';
+    }
+    
+    // Collect unique filenames only — NO excerpts
+    final seen = <String>{};
+    final filenames = <String>[];
+    for (final chunk in chunks) {
+      final name = _toFilename(chunk.source);
+      if (seen.add(name)) filenames.add(name);
+    }
+    
+    if (filenames.isEmpty) return '';
+    
+    final buffer = StringBuffer('\n\n**Sources:**\n');
+    for (int i = 0; i < filenames.length; i++) {
+      buffer.write('${i + 1}. ${filenames[i]}\n');
+    }
+    return buffer.toString().trimRight();
   }
 
   Future<bool> _isOllamaReachable() async {

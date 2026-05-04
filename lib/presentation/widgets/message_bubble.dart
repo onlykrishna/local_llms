@@ -23,10 +23,19 @@ class MessageBubble extends StatelessWidget {
     // 1. Strip citation markers [1], [2]
     result = result.replaceAll(RegExp(r'\[\d+\]'), '');
     
-    // 2. Strip horizontal rules
+    // 2. Strip legacy citation footer (divider and [N] source, p.X lines)
+    // First, remove the divider and everything after it if it looks like the legacy footer
+    if (result.contains('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')) {
+      result = result.split('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')[0];
+    }
+
+    // 3. Strip standalone legacy citation lines just in case
+    result = result.replaceAll(RegExp(r'\[\d+\]\s+.*?, p\.\d+'), '');
+
+    // 4. Strip horizontal rules
     result = result.replaceAll(RegExp(r'[-━─]{3,}'), '');
     
-    // 3. Strip leaked INSTRUCTION/CONTEXT prompts
+    // 5. Strip leaked INSTRUCTION/CONTEXT prompts
     result = result.replaceAll(
         RegExp(r'INSTRUCTION:.*', caseSensitive: false), '');
     result = result.replaceAll(
@@ -156,12 +165,6 @@ class MessageBubble extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            // Suppress chip-based citations when the message already
-                            // has a structured **Sources** markdown block from the
-                            // direct-bypass path. parseCitations only matches [N] style
-                            // brackets which we no longer emit, so this is belt-and-suspenders.
-                            if (!isMe && !message.content.contains('**Sources**'))
-                              ..._buildCitations(theme),
                             const SizedBox(height: 6),
                             Text(
                               DateFormat('hh:mm').format(message.timestamp),
@@ -237,77 +240,4 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
-  List<Widget> _buildCitations(ThemeData theme) {
-    final citationService = Get.isRegistered<SourceCitationService>() 
-        ? Get.find<SourceCitationService>() 
-        : SourceCitationService(); // fallback if not injected
-    
-    final citations = citationService.parseCitations(message.content);
-    if (citations.isEmpty) return [];
-
-    return [
-      const SizedBox(height: 12),
-      const Divider(height: 1, color: Colors.black12),
-      const SizedBox(height: 8),
-      Text(
-        'SOURCES',
-        style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.2,
-          color: theme.colorScheme.primary,
-        ),
-      ),
-      const SizedBox(height: 6),
-      Wrap(
-        spacing: 6,
-        runSpacing: 6,
-        children: citations.map((c) => _CitationChip(citation: c)).toList(),
-      ),
-    ];
-  }
-}
-
-class _CitationChip extends StatelessWidget {
-  final Citation citation;
-  const _CitationChip({required this.citation});
-
-  String _shortName(String fileName) {
-    // Remove extension
-    final noExt = fileName.replaceAll('.pdf', '');
-    // Truncate to 15 chars
-    return noExt.length > 15
-        ? '${noExt.substring(0, 14)}…'
-        : noExt;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 150),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        color: Colors.white.withOpacity(0.08),
-        border: Border.all(color: Colors.white24, width: 0.5),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.article_outlined, size: 11, color: Colors.white60),
-          const SizedBox(width: 4),
-          Flexible(
-            child: Text(
-              _shortName(citation.fileName),
-              style: const TextStyle(fontSize: 11, color: Colors.white70),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-            ),
-          ),
-          Text(' p.${citation.pageNumber}',
-            style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.4))),
-        ],
-      ),
-    );
-  }
 }

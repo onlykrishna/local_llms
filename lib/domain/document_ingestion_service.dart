@@ -13,6 +13,7 @@ import '../data/document_chunk.dart';
 import '../data/source_document.dart';
 import '../data/models/pdf_document_meta.dart';
 import '../core/constants/app_constants.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'kb_domain.dart';
 import '../objectbox.g.dart';
 
@@ -24,11 +25,39 @@ class DocumentIngestionService extends GetxService {
 
   final RxDouble ingestionProgress = 0.0.obs;
 
+  static const String INGESTION_VERSION = 'v2';
+
   DocumentIngestionService(this.store, this.embeddingService) {
     docBox = store.box<SourceDocument>();
     chunkBox = store.box<DocumentChunk>();
     // Clean up any leftover temp_ files from previous crash during ingestion
     _cleanupTempFiles();
+    _checkVersionAndReingest();
+  }
+
+  Future<void> _checkVersionAndReingest() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final stored = prefs.getString('ingestion_version');
+      if (stored != INGESTION_VERSION) {
+        debugPrint('[Ingestion] Version mismatch (stored: $stored, new: $INGESTION_VERSION) - clearing DB for re-ingestion');
+        chunkBox.removeAll();
+        docBox.removeAll();
+        
+        // Also clear library box status if needed, but since we delete SourceDocument entries, they will be re-processed.
+        final libraryBox = Hive.box<PdfDocumentMeta>(AppConstants.pdfLibraryBoxName);
+        for (final key in libraryBox.keys) {
+          final doc = libraryBox.get(key);
+          if (doc != null) {
+            libraryBox.put(key, doc.copyWith(status: 'pending'));
+          }
+        }
+        
+        await prefs.setString('ingestion_version', INGESTION_VERSION);
+      }
+    } catch (e) {
+      debugPrint('[Ingestion] Error during version check: $e');
+    }
   }
 
   /// Deletes any temp_*.pdf files left in pdf_library/ from crashed sessions
@@ -409,27 +438,28 @@ _ExtractionResult _extractAndChunkInIsolate(Map<String, dynamic> params) {
     // The regex uses a lookahead so we keep the delimiter at the start of each segment
     final faqBoundary = RegExp(r'(?=(?:^|\n)\s*\d{1,2}[\.。]\s+[A-Z])', multiLine: true);
     List<String> faqSegments = normalizedText.split(faqBoundary)
-        .map((s) => s.replaceAll('\n', ' ').replaceAll(RegExp(r'\s+'), ' ').trim())
+        .map((s) => s.trim())
         .where((s) => s.isNotEmpty)
         .toList();
 
-    // If no FAQ boundaries found (plain prose page), fall back to paragraph split
+    // If no FAQ boundaries found (plain prose page), fall back to list-aware split
     if (faqSegments.length <= 1) {
-      faqSegments = normalizedText
-          .split(RegExp(r'\n{2,}'))
-          .map((p) => p.replaceAll('\n', ' ').trim())
-          .where((p) => p.isNotEmpty)
-          .toList();
+      faqSegments = _splitWithListAwareness(normalizedText);
     }
 
-    // Now emit each segment as its own chunk (split large ones by sentences)
+    // Now emit each segment as its own chunk (split large ones by list awareness or sentences)
     List<String> pageChunks = [];
     for (final seg in faqSegments) {
       if (seg.length <= 900) {
-        pageChunks.add(seg);
+        pageChunks.add(seg.replaceAll('\n', ' ').replaceAll(RegExp(r'\s+'), ' '));
       } else {
-        // Large answer block — split further by sentence
-        pageChunks.addAll(_splitIntoSentences(seg));
+        // Large answer block — split further by list awareness
+        final subChunks = _splitWithListAwareness(seg);
+        if (subChunks.length <= 1) {
+           pageChunks.addAll(_splitIntoSentences(seg.replaceAll('\n', ' ')));
+        } else {
+           pageChunks.addAll(subChunks.map((s) => s.replaceAll('\n', ' ').replaceAll(RegExp(r'\s+'), ' ')));
+        }
       }
     }
 
@@ -474,6 +504,46 @@ _ExtractionResult _extractAndChunkInIsolate(Map<String, dynamic> params) {
   }
   document.dispose();
   return _ExtractionResult(allChunks, pageCount);
+}
+
+List<String> _splitWithListAwareness(String text) {
+  final chunks = <String>[];
+  final lines = text.split('\n');
+  
+  StringBuffer currentChunk = StringBuffer();
+  bool inList = false;
+  
+  for (final line in lines) {
+    final trimmed = line.trim();
+    final isListItem = RegExp(r'^(\d+[\.\)]|[-•*])\s').hasMatch(trimmed);
+    
+    if (isListItem) {
+      inList = true;
+      currentChunk.writeln(line);
+    } else if (inList && trimmed.isEmpty) {
+      // End of list — finalize this chunk
+      if (currentChunk.length > 50) {
+        chunks.add(currentChunk.toString().trim());
+        currentChunk = StringBuffer();
+      }
+      inList = false;
+    } else if (!inList) {
+      // Normal paragraph splitting logic
+      currentChunk.writeln(line);
+      if (currentChunk.length > 400) {
+        chunks.add(currentChunk.toString().trim());
+        currentChunk = StringBuffer();
+      }
+    } else {
+      currentChunk.writeln(line);
+    }
+  }
+  
+  if (currentChunk.isNotEmpty) {
+    chunks.add(currentChunk.toString().trim());
+  }
+  
+  return chunks.where((c) => c.length > 30).toList();
 }
 
 List<String> _splitIntoSentences(String text) {

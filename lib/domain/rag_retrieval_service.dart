@@ -34,6 +34,7 @@ class RagResult {
   final String? context;
   final List<ScoredChunk> chunks;
   final QueryIntent intent;
+  final bool contextSufficient;
 
   RagResult({
     required this.requiresLlm,
@@ -43,30 +44,34 @@ class RagResult {
     this.isFromKb = false,
     this.context,
     this.intent = QueryIntent.other,
+    this.contextSufficient = false,
   });
 
   factory RagResult.directBypass(String content, List<String> sources, List<ScoredChunk> chunks,
-          {bool isFromKb = false, QueryIntent intent = QueryIntent.other}) =>
+          {bool isFromKb = false, QueryIntent intent = QueryIntent.other, String? context}) =>
       RagResult(
           requiresLlm: false,
           content: content,
           sources: sources,
           chunks: chunks,
           isFromKb: isFromKb,
-          intent: intent);
+          intent: intent,
+          context: context,
+          contextSufficient: true);
 
   factory RagResult.llmGrounded(String context, List<String> sources, List<ScoredChunk> chunks,
-          {QueryIntent intent = QueryIntent.other}) =>
+          {QueryIntent intent = QueryIntent.other, bool contextSufficient = true}) =>
       RagResult(
           requiresLlm: true,
           content: '',
           context: context,
           sources: sources,
           chunks: chunks,
-          intent: intent);
+          intent: intent,
+          contextSufficient: contextSufficient);
 
   factory RagResult.noAnswer() =>
-      RagResult(requiresLlm: false, content: 'No answer available.', sources: [], chunks: []);
+      RagResult(requiresLlm: false, content: 'No answer available.', sources: [], chunks: [], contextSufficient: false);
 }
 
 class RagRetrievalService extends GetxService {
@@ -213,20 +218,8 @@ class RagRetrievalService extends GetxService {
     }
     print('[RAG] Intent detected: $intent');
 
-    // ── Step 1: Scoped vector search ────────────────────────────────────────
-    final scopedChunks = await _vectorSearch(expanded, resolvedScope, 40);
-    print('[RAG] Raw results: ${scopedChunks.length}');
-
-    // ── Step 2: If too few scoped results, try broader unscoped search ──────
-    List<ScoredChunk> allCandidates = scopedChunks;
-    if (scopedChunks.length < 2 && resolvedScope != null) {
-      print('[RAG] Too few scoped chunks (${scopedChunks.length}) → trying broader unscoped search');
-      final broader = await _vectorSearch(expanded, null, 20);
-      // Merge and deduplicate
-      final combined = [...scopedChunks, ...broader];
-      allCandidates = combined;
-      print('[RAG] Broader search added ${broader.length} chunks (total: ${allCandidates.length})');
-    }
+    // ── Vector Search with Intent Augmentation and Fallback ─────────────────
+    final allCandidates = await _vectorSearchWithFallback(expanded, intent, resolvedScope);
 
     if (allCandidates.isEmpty) return RagResult.noAnswer();
 
@@ -261,41 +254,114 @@ class RagRetrievalService extends GetxService {
     final top = boosted.first;
 
     // ── Step 6: Threshold check ─────────────────────────────────────────────
-    final threshold = resolvedScope != null ? 0.25 : 0.40;
+    final threshold = 0.40;
     print('[RAG] Top score: ${top.score.toStringAsFixed(3)} | Threshold: $threshold | Match: ${top.score >= threshold}');
 
-    if (top.score < threshold) {
-      print('[RAG] → NO ANSWER (below threshold)');
-      return RagResult.noAnswer();
+    // If the top chunk score is below 0.40 even after keyword boost,
+    // return a RagResult with a special flag: contextSufficient = false
+    // The router must check this flag and return "not available" without calling LLM.
+    final bool contextSufficient = top.score >= threshold;
+
+    if (!contextSufficient) {
+      print('[RAG] → NO ANSWER (below threshold) contextSufficient = false');
+      return RagResult.llmGrounded(
+        '', 
+        [], 
+        boosted.take(3).toList(), 
+        intent: intent, 
+        contextSufficient: false
+      );
     }
 
-    // ── Step 7: High-confidence bypass → serve directly ────────────────────
+    // ── Step 8: Build context for ALL paths (including bypass fallback) ──
+    final int chunkLimit = (intent == QueryIntent.definition) ? 10 : 3;
+    final selected = boosted.where((s) => s.score >= threshold).take(chunkLimit).toList();
+    // Filter out empty/whitespace chunks from LLM context
+    final validSelected = selected.where((s) => s.chunk.text.trim().length > 20).toList();
+    final context = validSelected.map((s) => _sanitizeChunk(s.chunk.text)).join('\n---\n');
+
+    print('[RAG] Final chunks: ${validSelected.length}');
+
+    // ── Step 9: High-confidence bypass → serve directly ────────────────────
     final bypassThreshold = resolvedScope != null ? 0.65 : 0.85;
     if (top.score >= bypassThreshold) {
       print('[RAG] → HIGH CONFIDENCE BYPASS (score ${top.score.toStringAsFixed(2)})');
       return RagResult.directBypass(
         _sanitizeChunk(top.chunk.text),
-        _buildUniqueSources(boosted.take(3).toList()),
-        boosted.take(3).toList(),
+        _buildUniqueSources(validSelected),
+        validSelected,
         isFromKb: top.chunk.isHardcoded,
         intent: intent,
+        context: context,
       );
     }
-
-    // ── Step 8: LLM grounding with top 3 content chunks ────────────────────
-    final selected = boosted.where((s) => s.score >= threshold).take(3).toList();
-    // Filter out empty/whitespace chunks from LLM context
-    final validSelected = selected.where((s) => s.chunk.text.trim().length > 20).toList();
-    final context = validSelected.map((s) => _sanitizeChunk(s.chunk.text)).join('\n\n');
-
-    print('[RAG] Final chunks: ${validSelected.length}');
 
     return RagResult.llmGrounded(
       context,
       _buildUniqueSources(validSelected),
       validSelected,
       intent: intent,
+      contextSufficient: contextSufficient,
     );
+  }
+
+  bool _chunkAnswersQuery(String queryLower, DocumentChunk chunk) {
+    final chunkLower = chunk.text.toLowerCase();
+    
+    // Simple subject extraction: remove question words
+    final questionWords = ['what', 'is', 'are', 'how', 'does', 'do', 'can', 
+                           'tell', 'me', 'about', 'explain', 'define', 'a', 
+                           'the', 'for', 'of', 'in'];
+    final queryWords = queryLower.split(RegExp(r'\W+'))
+        .where((w) => w.length > 2 && !questionWords.contains(w))
+        .toList();
+    
+    // The chunk must contain AT LEAST 60% of the meaningful query words
+    if (queryWords.isEmpty) return true;
+    
+    int matchCount = queryWords.where((w) => chunkLower.contains(w)).length;
+    double matchRatio = matchCount / queryWords.length;
+    
+    return matchRatio >= 0.6;
+  }
+
+  String _augmentQueryForIntent(String query, QueryIntent intent) {
+    switch (intent) {
+      case QueryIntent.documents:
+        return '$query required documents list checklist KYC identity proof';
+      case QueryIntent.fees:
+        return '$query processing fee charges cost amount';
+      case QueryIntent.eligibility:
+        return '$query eligible criteria age income salary requirement';
+      case QueryIntent.definition:
+        return '$query meaning definition what is description overview';
+      default:
+        return query;
+    }
+  }
+
+  Future<List<ScoredChunk>> _vectorSearchWithFallback(
+      String query, QueryIntent intent, String? scope) async {
+    
+    // Primary search with augmented query
+    final augmented = _augmentQueryForIntent(query, intent);
+    var results = await _vectorSearch(augmented, scope, 20);
+    
+    var filtered = results.where((sc) => !_isHeaderChunk(sc.chunk.text)).toList();
+    filtered = _deduplicateChunks(filtered);
+    
+    // Check if any result actually answers the query
+    bool hasRelevant = filtered.any((c) => _chunkAnswersQuery(query.toLowerCase(), c.chunk));
+    
+    if (!hasRelevant) {
+      print('[RAG] No relevant chunks found in primary search. Running secondary search...');
+      // Secondary search: drop scope restriction, use raw query
+      results = await _vectorSearch(query, null, 20);
+      filtered = results.where((sc) => !_isHeaderChunk(sc.chunk.text)).toList();
+      filtered = _deduplicateChunks(filtered);
+    }
+    
+    return filtered;
   }
 
   // ── Internal: vector search helper ────────────────────────────────────────
@@ -342,8 +408,12 @@ class RagRetrievalService extends GetxService {
   }
 
   String _formatSource(DocumentChunk chunk) {
-    if (chunk.isHardcoded) return '📄 Knowledge Base — ${chunk.category ?? "FAQ"}';
-    return '${chunk.source ?? "Document"}, p.${chunk.pageNumber}';
+    String fileName = chunk.isHardcoded ? 'Knowledge Base — ${chunk.category ?? "FAQ"}' : (chunk.source ?? "Document");
+    String excerpt = chunk.text.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (excerpt.length > 80) {
+      excerpt = excerpt.substring(0, 80) + '...';
+    }
+    return '• [$fileName] — "$excerpt"';
   }
 
   String _sanitizeChunk(String raw) {
