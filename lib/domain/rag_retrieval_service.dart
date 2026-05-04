@@ -274,8 +274,28 @@ class RagRetrievalService extends GetxService {
     }
 
     // ── Step 8: Build context for ALL paths (including bypass fallback) ──
-    final int chunkLimit = (intent == QueryIntent.definition) ? 10 : 3;
-    final selected = boosted.where((s) => s.score >= threshold).take(chunkLimit).toList();
+    final int chunkLimit = (intent == QueryIntent.definition) ? 5 : 3;
+    
+    var scoredChunks = boosted.where((s) => s.score >= threshold).toList();
+    
+    if (intent == QueryIntent.definition) {
+      final definitionalPhrases = [
+        'stands for', 'is defined as', 'abbreviated as',
+        'refers to', 'full form', 'short for',
+      ];
+      
+      // Partition: definition chunks first, others second
+      final defChunks = scoredChunks.where((c) => 
+          definitionalPhrases.any((p) => 
+              c.chunk.text.toLowerCase().contains(p))).toList();
+      final otherChunks = scoredChunks.where((c) => 
+          !definitionalPhrases.any((p) => 
+              c.chunk.text.toLowerCase().contains(p))).toList();
+      
+      scoredChunks = [...defChunks, ...otherChunks];
+    }
+
+    final selected = scoredChunks.take(chunkLimit).toList();
     // Filter out empty/whitespace chunks from LLM context
     final validSelected = selected.where((s) => s.chunk.text.trim().length > 20).toList();
     final context = validSelected.map((s) => _sanitizeChunk(s.chunk.text)).join('\n---\n');

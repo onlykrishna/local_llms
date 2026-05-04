@@ -311,7 +311,7 @@ class InferenceRouterService extends GetxService {
     currentBackend.value = backend;
 
     // Use the context from result (which we now ensure exists even for bypass)
-    final int contextLimit = (result.intent == QueryIntent.definition) ? result.chunks.length : 3;
+    final int contextLimit = (result.intent == QueryIntent.definition) ? 5 : 3;
     final contextChunks = result.chunks.take(contextLimit).toList();
     final ragContext = contextChunks.map((s) => _cleanChunkText(s.chunk.text)).join('\n---\n');
 
