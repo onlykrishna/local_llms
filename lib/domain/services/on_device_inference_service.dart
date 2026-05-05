@@ -6,6 +6,7 @@ import 'package:get/get.dart';
 import 'package:llamadart/llamadart.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../core/services/settings_service.dart';
+import '../../core/services/log_service.dart';
 import 'inference_isolate.dart';
 
 /// Exception thrown when no model is installed but inference is requested.
@@ -183,7 +184,7 @@ class OnDeviceInferenceService extends GetxService {
       ],
     );
 
-    debugPrint('[LLM] Sending prompt (${fullPrompt.length} chars):\n'
+    LogService.to.log('[LLM] Sending prompt (${fullPrompt.length} chars):\n'
         '--- PROMPT START ---\n$fullPrompt\n--- PROMPT END ---');
 
     final responsePort = ReceivePort();
@@ -231,7 +232,7 @@ class OnDeviceInferenceService extends GetxService {
     ]) {
       final idx = raw.indexOf(stop);
       if (idx != -1) {
-        debugPrint('[SANITIZER] Stop token found at $idx: "$stop" — truncating');
+        LogService.to.log('[SANITIZER] Stop token found at $idx: "$stop" — truncating');
         raw = raw.substring(0, idx);
       }
     }
@@ -250,7 +251,7 @@ class OnDeviceInferenceService extends GetxService {
         deduped.add(line);
         seen.add(trimmed);
       } else {
-        debugPrint('[SANITIZER] Duplicate line removed: "$trimmed"');
+        LogService.to.log('[SANITIZER] Duplicate line removed: "$trimmed"');
       }
     }
     raw = deduped.join('\n');
@@ -265,7 +266,7 @@ class OnDeviceInferenceService extends GetxService {
       // If second half begins with the same 8 words as first half → loop detected
       final probe = words.sublist(0, 8).join(' ').toLowerCase();
       if (secondHalf.contains(probe)) {
-        debugPrint(
+        LogService.to.log(
             '[SANITIZER] ⚠️ Mid-response loop detected — truncating at midpoint');
         raw = words.sublist(0, half).join(' ');
       }
@@ -273,7 +274,7 @@ class OnDeviceInferenceService extends GetxService {
 
     // 5. Cap total length to prevent excessively long answers
     if (raw.length > 1200) {
-      debugPrint('[SANITIZER] Response too long (${raw.length}) — capping at 1200 chars');
+      LogService.to.log('[SANITIZER] Response too long (${raw.length}) — capping at 1200 chars');
       // Find last sentence boundary before cap
       final cap = raw.substring(0, 1200);
       final lastPeriod = cap.lastIndexOf(RegExp(r'[.!?]'));
@@ -314,7 +315,7 @@ class OnDeviceInferenceService extends GetxService {
 
       await _startIsolate();
     } catch (e) {
-      debugPrint('Error clearing model cache: $e');
+      LogService.to.log('Error clearing model cache: $e');
     }
   }
 }

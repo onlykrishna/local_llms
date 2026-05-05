@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import '../../core/services/settings_service.dart';
 import 'package:get/get.dart';
+import '../../core/services/log_service.dart';
 
 class GeminiRateLimitException implements Exception {
   final String message;
@@ -28,16 +29,16 @@ class GeminiDatasource {
     required String systemPrompt,
     List<Map<String, dynamic>>? history,
   }) async* {
-    print('>>> GEMINI: key length = ${apiKey.length}');
+    LogService.to.log('>>> GEMINI: key length = ${apiKey.length}');
     if (apiKey.isEmpty) {
-      print('>>> GEMINI: API Key missing');
+      LogService.to.log('>>> GEMINI: API Key missing');
       throw GeminiRateLimitException('API Key missing');
     }
 
     _cancelToken = CancelToken();
 
     try {
-      print('>>> GEMINI: sending request to v1beta...');
+      LogService.to.log('>>> GEMINI: sending request to v1beta...');
       final response = await _dio.post(
         '$_baseUrl?key=$apiKey&alt=sse',
         data: {
@@ -68,7 +69,7 @@ class GeminiDatasource {
         cancelToken: _cancelToken,
       );
 
-      print('>>> GEMINI: response status = ${response.statusCode}');
+      LogService.to.log('>>> GEMINI: response status = ${response.statusCode}');
 
       // Parse v1beta SSE stream (data: prefix)
       final stream = response.data!.stream
@@ -100,10 +101,10 @@ class GeminiDatasource {
       }
     } on DioException catch (e) {
       if (e.type == DioExceptionType.cancel) {
-        print('>>> GEMINI: request cancelled');
+        LogService.to.log('>>> GEMINI: request cancelled');
         return;
       }
-      print('>>> GEMINI: Dio Error: ${e.message} (Status: ${e.response?.statusCode})');
+      LogService.to.log('>>> GEMINI: Dio Error: ${e.message} (Status: ${e.response?.statusCode})');
       if (e.response?.statusCode == 429) {
         throw GeminiRateLimitException('Gemini 429 quota exhausted');
       }
@@ -112,13 +113,13 @@ class GeminiDatasource {
         yield '\nDetail: ${e.response?.data}';
       }
     } catch (e) {
-      print('>>> GEMINI: general error: $e');
+      LogService.to.log('>>> GEMINI: general error: $e');
       yield '⚠️ Gemini error: $e';
     }
   }
 
   void cancel() {
-    print('>>> GEMINI: manual cancel triggered');
+    LogService.to.log('>>> GEMINI: manual cancel triggered');
     _cancelToken?.cancel('Cancelled by user');
     _cancelToken = null;
   }

@@ -6,6 +6,7 @@ import '../data/document_chunk.dart';
 import 'services/acronym_expander.dart';
 import 'services/fuzzy_query_corrector.dart';
 import '../objectbox.g.dart';
+import '../core/services/log_service.dart';
 
 // ── Query Intent ────────────────────────────────────────────────────────────
 enum QueryIntent { documents, fees, eligibility, interest, tenure, process, definition, other }
@@ -180,10 +181,10 @@ class RagRetrievalService extends GetxService {
         seen.add(key);
         unique.add(sc);
       } else {
-        debugPrint('[RAG] Duplicate chunk removed: ${key.substring(0, min(30, key.length))}');
+        LogService.to.log('[RAG] Duplicate chunk removed: ${key.substring(0, min(30, key.length))}');
       }
     }
-    print('[RAG] After dedup: ${unique.length} (removed ${chunks.length - unique.length} duplicates)');
+    LogService.to.log('[RAG] After dedup: ${unique.length} (removed ${chunks.length - unique.length} duplicates)');
     return unique;
   }
 
@@ -197,11 +198,11 @@ class RagRetrievalService extends GetxService {
 
   Future<RagResult> retrieve(String rawQuery) async {
     final totalChunks = chunkBox.count();
-    print('[RAG] Total chunks in DB: $totalChunks');
-    print('[RAG] Raw Query: $rawQuery');
+    LogService.to.log('[RAG] Total chunks in DB: $totalChunks');
+    LogService.to.log('[RAG] Raw Query: $rawQuery');
 
     if (totalChunks == 0) {
-      print('[RAG] ERROR: ObjectBox is EMPTY');
+      LogService.to.log('[RAG] ERROR: ObjectBox is EMPTY');
       return RagResult.noAnswer();
     }
 
@@ -211,12 +212,12 @@ class RagRetrievalService extends GetxService {
     final intent = detectIntent(typoCorrected);
 
     if (typoCorrected != rawQuery.toLowerCase().trim()) {
-      print('[RAG] Corrected query: "$typoCorrected"');
+      LogService.to.log('[RAG] Corrected query: "$typoCorrected"');
     }
     if (resolvedScope != null) {
-      print('[RAG] Scope resolved: $resolvedScope');
+      LogService.to.log('[RAG] Scope resolved: $resolvedScope');
     }
-    print('[RAG] Intent detected: $intent');
+    LogService.to.log('[RAG] Intent detected: $intent');
 
     // ── Vector Search with Intent Augmentation and Fallback ─────────────────
     final allCandidates = await _vectorSearchWithFallback(expanded, intent, resolvedScope);
@@ -225,7 +226,7 @@ class RagRetrievalService extends GetxService {
 
     // ── Step 3: Filter header/title chunks ──────────────────────────────────
     final contentChunks = allCandidates.where((sc) => !_isHeaderChunk(sc.chunk.text)).toList();
-    print('[RAG] Filtered ${allCandidates.length - contentChunks.length} header/title chunks');
+    LogService.to.log('[RAG] Filtered ${allCandidates.length - contentChunks.length} header/title chunks');
 
     // Fall back to all chunks if header filter removed everything
     final candidates = contentChunks.isNotEmpty ? contentChunks : allCandidates;
@@ -248,14 +249,14 @@ class RagRetrievalService extends GetxService {
     // Log top 3 for debugging
     for (int i = 0; i < min(3, boosted.length); i++) {
       final c = boosted[i];
-      print('[RAG] Score: ${c.score.toStringAsFixed(3)} | ${c.chunk.text.substring(0, min(60, c.chunk.text.length))}');
+      LogService.to.log('[RAG] Score: ${c.score.toStringAsFixed(3)} | ${c.chunk.text.substring(0, min(60, c.chunk.text.length))}');
     }
 
     final top = boosted.first;
 
     // ── Step 6: Threshold check ─────────────────────────────────────────────
     final threshold = 0.40;
-    print('[RAG] Top score: ${top.score.toStringAsFixed(3)} | Threshold: $threshold | Match: ${top.score >= threshold}');
+    LogService.to.log('[RAG] Top score: ${top.score.toStringAsFixed(3)} | Threshold: $threshold | Match: ${top.score >= threshold}');
 
     // If the top chunk score is below 0.40 even after keyword boost,
     // return a RagResult with a special flag: contextSufficient = false
@@ -263,7 +264,7 @@ class RagRetrievalService extends GetxService {
     final bool contextSufficient = top.score >= threshold;
 
     if (!contextSufficient) {
-      print('[RAG] → NO ANSWER (below threshold) contextSufficient = false');
+      LogService.to.log('[RAG] → NO ANSWER (below threshold) contextSufficient = false');
       return RagResult.llmGrounded(
         '', 
         [], 
@@ -300,12 +301,12 @@ class RagRetrievalService extends GetxService {
     final validSelected = selected.where((s) => s.chunk.text.trim().length > 20).toList();
     final context = validSelected.map((s) => _sanitizeChunk(s.chunk.text)).join('\n---\n');
 
-    print('[RAG] Final chunks: ${validSelected.length}');
+    LogService.to.log('[RAG] Final chunks: ${validSelected.length}');
 
     // ── Step 9: High-confidence bypass → serve directly ────────────────────
     final bypassThreshold = resolvedScope != null ? 0.65 : 0.85;
     if (top.score >= bypassThreshold) {
-      print('[RAG] → HIGH CONFIDENCE BYPASS (score ${top.score.toStringAsFixed(2)})');
+      LogService.to.log('[RAG] → HIGH CONFIDENCE BYPASS (score ${top.score.toStringAsFixed(2)})');
       return RagResult.directBypass(
         _sanitizeChunk(top.chunk.text),
         _buildUniqueSources(validSelected),
@@ -374,7 +375,7 @@ class RagRetrievalService extends GetxService {
     bool hasRelevant = filtered.any((c) => _chunkAnswersQuery(query.toLowerCase(), c.chunk));
     
     if (!hasRelevant) {
-      print('[RAG] No relevant chunks found in primary search. Running secondary search...');
+      LogService.to.log('[RAG] No relevant chunks found in primary search. Running secondary search...');
       // Secondary search: drop scope restriction, use raw query
       results = await _vectorSearch(query, null, 20);
       filtered = results.where((sc) => !_isHeaderChunk(sc.chunk.text)).toList();

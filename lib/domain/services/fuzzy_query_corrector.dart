@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import '../../core/services/log_service.dart';
 
 class FuzzyQueryCorrector {
   /// Known corrections dictionary (deterministic, highly reliable)
@@ -36,12 +37,12 @@ class FuzzyQueryCorrector {
 
   static String correctQuery(String query) {
     final normalized = normalize(query);
-    debugPrint('[FUZZY] Normalized query: "$normalized"');
+    LogService.to.log('[FUZZY] Normalized query: "$normalized"');
 
     // Step 1: Check full-phrase corrections dictionary first (highest priority)
     if (_corrections.containsKey(normalized)) {
       final fixed = _corrections[normalized]!;
-      debugPrint('[FUZZY] Full-phrase dictionary match: "$normalized" -> "$fixed"');
+      LogService.to.log('[FUZZY] Full-phrase dictionary match: "$normalized" -> "$fixed"');
       return fixed;
     }
 
@@ -59,7 +60,7 @@ class FuzzyQueryCorrector {
     final result = correctedWords.join(' ');
 
     if (result != normalized) {
-      debugPrint('[FUZZY] Corrected: "$normalized" -> "$result"');
+      LogService.to.log('[FUZZY] Corrected: "$normalized" -> "$result"');
     }
     
     return result;

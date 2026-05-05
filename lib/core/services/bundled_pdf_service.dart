@@ -14,6 +14,7 @@ import '../constants/app_constants.dart';
 import '../../domain/document_ingestion_service.dart';
 import '../../domain/kb_domain.dart';
 import '../../objectbox.g.dart';
+import '../services/log_service.dart';
 
 class BundledPdfService extends GetxService {
   static const List<String> _bundledPdfAssets = [
@@ -39,49 +40,49 @@ class BundledPdfService extends GetxService {
   }
 
   Future<void> _syncBundledPdfs() async {
-    print('[DIAG] ========= BUNDLED PDF SERVICE START =========');
+    LogService.to.log('[DIAG] ========= BUNDLED PDF SERVICE START =========');
     
     // Check 1: Version-based Force Re-index
     final storedVersion = _settingsBox.get('kb_version');
-    print('[DIAG] Stored KB version: $storedVersion');
-    print('[DIAG] Current KB version: ${AppConstants.kbVersion}');
+    LogService.to.log('[DIAG] Stored KB version: $storedVersion');
+    LogService.to.log('[DIAG] Current KB version: ${AppConstants.kbVersion}');
 
     final bool forceReindex = storedVersion != AppConstants.kbVersion;
     if (forceReindex) {
-      print('[DIAG] !!! KB Version mismatch. Triggering forced re-index.');
+      LogService.to.log('[DIAG] !!! KB Version mismatch. Triggering forced re-index.');
     }
 
     // Check 2: ObjectBox chunk count BEFORE indexing
     final chunkBox = _store.box<DocumentChunk>();
     final beforeCount = chunkBox.count();
-    print('[DIAG] ObjectBox chunks BEFORE indexing: $beforeCount');
+    LogService.to.log('[DIAG] ObjectBox chunks BEFORE indexing: $beforeCount');
 
     // Check 3: Asset loading
     final List<String> assetPaths = _bundledPdfAssets;
     for (final assetPath in assetPaths) {
       try {
         final bytes = await rootBundle.load(assetPath);
-        print('[DIAG] Asset loaded OK: $assetPath (${bytes.lengthInBytes} bytes)');
+        LogService.to.log('[DIAG] Asset loaded OK: $assetPath (${bytes.lengthInBytes} bytes)');
       } catch (e) {
-        print('[DIAG] ASSET LOAD FAILED: $assetPath → $e');
+        LogService.to.log('[DIAG] ASSET LOAD FAILED: $assetPath → $e');
       }
     }
 
     if (forceReindex) {
       await _safeReIndex();
     } else {
-      debugPrint('[BUNDLED] Normal sync: Version matches, skipping.');
+      LogService.to.log('[BUNDLED] Normal sync: Version matches, skipping.');
     }
 
     // Check 4: ObjectBox chunk count AFTER indexing  
     final afterCount = chunkBox.count();
-    print('[DIAG] ObjectBox chunks AFTER indexing: $afterCount');
+    LogService.to.log('[DIAG] ObjectBox chunks AFTER indexing: $afterCount');
     
-    print('[DIAG] ========= BUNDLED PDF SERVICE END =========');
+    LogService.to.log('[DIAG] ========= BUNDLED PDF SERVICE END =========');
   }
 
   Future<void> _safeReIndex() async {
-    print('[BUNDLED] Starting safe re-index...');
+    LogService.to.log('[BUNDLED] Starting safe re-index...');
     
     final newChunks = <DocumentChunk>[];
     
@@ -97,14 +98,14 @@ class BundledPdfService extends GetxService {
         );
         
         newChunks.addAll(chunks);
-        print('[BUNDLED] Indexed: $assetPath → ${chunks.length} chunks');
+        LogService.to.log('[BUNDLED] Indexed: $assetPath → ${chunks.length} chunks');
       } catch (e) {
-        print('[BUNDLED] FAILED to index: $assetPath → $e');
+        LogService.to.log('[BUNDLED] FAILED to index: $assetPath → $e');
       }
     }
     
     if (newChunks.isEmpty) {
-      print('[BUNDLED] ERROR: No chunks generated! Aborting re-index. Old data preserved.');
+      LogService.to.log('[BUNDLED] ERROR: No chunks generated! Aborting re-index. Old data preserved.');
       return; 
     }
     
@@ -115,26 +116,26 @@ class BundledPdfService extends GetxService {
     ).build();
     final oldIds = oldBundledQuery.findIds();
     chunkBox.removeMany(oldIds);
-    print('[BUNDLED] Removed ${oldIds.length} old bundled chunks');
+    LogService.to.log('[BUNDLED] Removed ${oldIds.length} old bundled chunks');
     oldBundledQuery.close();
     
     chunkBox.putMany(newChunks);
-    print('[BUNDLED] Saved ${newChunks.length} new chunks');
+    LogService.to.log('[BUNDLED] Saved ${newChunks.length} new chunks');
     
     await _settingsBox.put('kb_version', AppConstants.kbVersion);
-    print('[BUNDLED] Version updated to ${AppConstants.kbVersion}');
+    LogService.to.log('[BUNDLED] Version updated to ${AppConstants.kbVersion}');
   }
 
   Future<void> nuclearReset() async {
-    print('[RESET] Wiping entire ObjectBox database chunks...');
+    LogService.to.log('[RESET] Wiping entire ObjectBox database chunks...');
     _store.box<DocumentChunk>().removeAll();
     
-    print('[RESET] Clearing KB version from settings...');
+    LogService.to.log('[RESET] Clearing KB version from settings...');
     await _settingsBox.delete('kb_version');
     
-    print('[RESET] Re-initializing bundled PDFs...');
+    LogService.to.log('[RESET] Re-initializing bundled PDFs...');
     await _syncBundledPdfs();
     
-    print('[RESET] Done. Chunk count: ${_store.box<DocumentChunk>().count()}');
+    LogService.to.log('[RESET] Done. Chunk count: ${_store.box<DocumentChunk>().count()}');
   }
 }

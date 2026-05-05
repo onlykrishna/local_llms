@@ -16,6 +16,7 @@ import '../core/constants/app_constants.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'kb_domain.dart';
 import '../objectbox.g.dart';
+import '../core/services/log_service.dart';
 
 class DocumentIngestionService extends GetxService {
   final Store store;
@@ -40,7 +41,7 @@ class DocumentIngestionService extends GetxService {
       final prefs = await SharedPreferences.getInstance();
       final stored = prefs.getString('ingestion_version');
       if (stored != INGESTION_VERSION) {
-        debugPrint('[Ingestion] Version mismatch (stored: $stored, new: $INGESTION_VERSION) - clearing DB for re-ingestion');
+        LogService.to.log('[Ingestion] Version mismatch (stored: $stored, new: $INGESTION_VERSION) - clearing DB for re-ingestion');
         chunkBox.removeAll();
         docBox.removeAll();
         
@@ -56,7 +57,7 @@ class DocumentIngestionService extends GetxService {
         await prefs.setString('ingestion_version', INGESTION_VERSION);
       }
     } catch (e) {
-      debugPrint('[Ingestion] Error during version check: $e');
+      LogService.to.log('[Ingestion] Error during version check: $e');
     }
   }
 
@@ -81,7 +82,7 @@ class DocumentIngestionService extends GetxService {
       for (final f in tempFiles) {
         try {
           await File(f.path).delete();
-          debugPrint('[Ingestion] Cleaned physical temp file: ${p.basename(f.path)}');
+          LogService.to.log('[Ingestion] Cleaned physical temp file: ${p.basename(f.path)}');
         } catch (_) {}
       }
 
@@ -100,7 +101,7 @@ class DocumentIngestionService extends GetxService {
 
         for (final doc in tempDocs) {
           if (!indexedFileNames.contains(doc.fileName)) {
-            debugPrint('[Ingestion] Purging ghost DB entry: ${doc.fileName}');
+            LogService.to.log('[Ingestion] Purging ghost DB entry: ${doc.fileName}');
             await deleteFromObjectBox(doc.fileName);
             
             // Also delete physical file if it exists and wasn't caught by the first pass
@@ -116,13 +117,13 @@ class DocumentIngestionService extends GetxService {
           .build();
       final orphanIds = orphanTempChunksQuery.findIds();
       if (orphanIds.isNotEmpty) {
-        debugPrint('[Ingestion] Purging ${orphanIds.length} orphan temp chunks');
+        LogService.to.log('[Ingestion] Purging ${orphanIds.length} orphan temp chunks');
         chunkBox.removeMany(orphanIds);
       }
       orphanTempChunksQuery.close();
       
     } catch (e) {
-      debugPrint('[Ingestion] Error cleaning temp files/DB: $e');
+      LogService.to.log('[Ingestion] Error cleaning temp files/DB: $e');
     }
   }
 
@@ -156,13 +157,13 @@ class DocumentIngestionService extends GetxService {
       sourceDoc.pageCount = extractionResult.pageCount;
       docBox.put(sourceDoc);
       
-      debugPrint('[Ingestion] Background extraction complete. Generated ${allChunks.length} chunks.');
+      LogService.to.log('[Ingestion] Background extraction complete. Generated ${allChunks.length} chunks.');
       ingestionProgress.value = 0.5;
 
       final int totalChunks = allChunks.length;
-      debugPrint('[Ingestion] Total chunks generated: $totalChunks');
+      LogService.to.log('[Ingestion] Total chunks generated: $totalChunks');
       if (totalChunks == 0) {
-        debugPrint('[Ingestion] WARNING: No chunks generated for document $fileName');
+        LogService.to.log('[Ingestion] WARNING: No chunks generated for document $fileName');
       }
 
       final List<DocumentChunk> validChunks = [];
@@ -176,7 +177,7 @@ class DocumentIngestionService extends GetxService {
           .map((c) => c.contentHash)
           .where((h) => h.isNotEmpty)
           .toSet();
-      debugPrint('[Ingestion] Existing hashes for docId=$docId: ${existingHashes.length}');
+      LogService.to.log('[Ingestion] Existing hashes for docId=$docId: ${existingHashes.length}');
 
       for (int i = 0; i < totalChunks; i += batchSize) {
         final end = (i + batchSize < totalChunks) ? i + batchSize : totalChunks;
@@ -185,7 +186,7 @@ class DocumentIngestionService extends GetxService {
         // Filter duplicates before embedding (saves compute)
         final uniqueBatch = batch.where((c) {
           if (c.contentHash.isNotEmpty && existingHashes.contains(c.contentHash)) {
-            debugPrint('[Ingestion] Skipping duplicate chunk: ${c.contentHash.substring(0, 8)}');
+            LogService.to.log('[Ingestion] Skipping duplicate chunk: ${c.contentHash.substring(0, 8)}');
             return false;
           }
           return true;
@@ -206,7 +207,7 @@ class DocumentIngestionService extends GetxService {
           norm = sqrt(norm);
 
           if (norm < 0.5 || norm > 1.5) {
-            debugPrint('[Ingestion] ⚠️ Bad embedding chunk $i+$j, norm=$norm, skipping');
+            LogService.to.log('[Ingestion] ⚠️ Bad embedding chunk $i+$j, norm=$norm, skipping');
             continue;
           }
 
@@ -217,14 +218,14 @@ class DocumentIngestionService extends GetxService {
           validChunks.add(uniqueBatch[j]);
 
           if (i + j < 5) {
-            debugPrint('[Ingestion] ✅ Chunk ${i + j}: norm=${norm.toStringAsFixed(3)} '
+            LogService.to.log('[Ingestion] ✅ Chunk ${i + j}: norm=${norm.toStringAsFixed(3)} '
                 'hash=${uniqueBatch[j].contentHash?.substring(0, 8)} '
                 'text="${uniqueBatch[j].text.substring(0, min(30, uniqueBatch[j].text.length))}..."');
           }
         }
 
         chunkBox.putMany(uniqueBatch);
-        debugPrint('[Ingestion] Saved ${uniqueBatch.length} unique chunks (batch $i–$end)');
+        LogService.to.log('[Ingestion] Saved ${uniqueBatch.length} unique chunks (batch $i–$end)');
 
         final progress = 0.5 + ((end / (totalChunks > 0 ? totalChunks : 1)) * 0.5);
         ingestionProgress.value =
@@ -234,7 +235,7 @@ class DocumentIngestionService extends GetxService {
       sourceDoc.status = 'ready';
       sourceDoc.chunkCount = validChunks.length;
       docBox.put(sourceDoc);
-      debugPrint('[Ingestion] Document ready: $fileName with ${validChunks.length} valid chunks in domain: ${domain.name}');
+      LogService.to.log('[Ingestion] Document ready: $fileName with ${validChunks.length} valid chunks in domain: ${domain.name}');
       ingestionProgress.value = 1.0;
 
       return (pageCount: extractionResult.pageCount, chunkCount: validChunks.length);
@@ -320,7 +321,7 @@ class DocumentIngestionService extends GetxService {
     required String fileName,
     required String sourceTag,
   }) async {
-    debugPrint('[INGEST] Processing: $fileName (${bytes.length} bytes)');
+    LogService.to.log('[INGEST] Processing: $fileName (${bytes.length} bytes)');
     
     // Extract text from PDF bytes
     final extractionResult = await compute(_extractAndChunkInIsolate, {
@@ -331,10 +332,10 @@ class DocumentIngestionService extends GetxService {
     });
 
     final rawChunks = extractionResult.chunks;
-    debugPrint('[INGEST] Extracted ${rawChunks.length} chunks from $fileName');
+    LogService.to.log('[INGEST] Extracted ${rawChunks.length} chunks from $fileName');
     
     if (rawChunks.isEmpty) {
-      debugPrint('[INGEST] WARNING: Empty chunks from $fileName');
+      LogService.to.log('[INGEST] WARNING: Empty chunks from $fileName');
       return [];
     }
     
@@ -357,11 +358,11 @@ class DocumentIngestionService extends GetxService {
           embeddedChunks.add(chunk);
         }
       } catch (e) {
-        debugPrint('[INGEST] Batch embedding failed at $i: $e');
+        LogService.to.log('[INGEST] Batch embedding failed at $i: $e');
       }
     }
     
-    debugPrint('[INGEST] Generated ${embeddedChunks.length} embedded chunks for $fileName');
+    LogService.to.log('[INGEST] Generated ${embeddedChunks.length} embedded chunks for $fileName');
     return embeddedChunks;
   }
 

@@ -12,6 +12,7 @@ import 'acronym_expander.dart';
 import 'fuzzy_query_corrector.dart';
 import '../deterministic_kb_matcher.dart';
 import '../../objectbox.g.dart';
+import '../../core/services/log_service.dart';
 
 enum InferenceBackend { ollama, onDevice }
 
@@ -155,9 +156,9 @@ class InferenceRouterService extends GetxService {
           _kbChunkCache[chunk.tags!] = chunk;
         }
       }
-      debugPrint('[CACHE] KB cache built: ${_kbChunkCache.length} entries');
+      LogService.to.log('[CACHE] KB cache built: ${_kbChunkCache.length} entries');
     } catch (e) {
-      debugPrint('[CACHE] Error building KB cache: $e');
+      LogService.to.log('[CACHE] Error building KB cache: $e');
     }
   }
 
@@ -180,9 +181,9 @@ class InferenceRouterService extends GetxService {
       String rawUserMessage, List<ChatMessage> history) async* {
     // Step 1: Fuzzy correction — correctedQuery used for BOTH retrieval AND LLM
     final correctedQuery = FuzzyQueryCorrector.correct(rawUserMessage);
-    print('[ROUTER] Original query: "$rawUserMessage"');
+    LogService.to.log('[ROUTER] Original query: "$rawUserMessage"');
     if (correctedQuery != rawUserMessage.toLowerCase().trim()) {
-      print('[ROUTER] Corrected query: "$correctedQuery"');
+      LogService.to.log('[ROUTER] Corrected query: "$correctedQuery"');
     }
 
     lastIsFromKb = false;
@@ -218,7 +219,7 @@ class InferenceRouterService extends GetxService {
 
     // ── Topic guard ───────────────────────────────────────────────────────────
     if (!_isOnTopic(correctedQuery)) {
-      debugPrint('[ROUTER] Off-topic → blocked');
+      LogService.to.log('[ROUTER] Off-topic → blocked');
       yield 'No answer available.';
       _emit(QueryStage.done, 'Done');
       return;
@@ -236,12 +237,12 @@ class InferenceRouterService extends GetxService {
     final topChunk = result.chunks.isNotEmpty ? result.chunks.first : null;
     final topScore = topChunk?.score ?? 0.0;
     
-    print('[ROUTER] Chunks retrieved: ${result.chunks.length}');
+    LogService.to.log('[ROUTER] Chunks retrieved: ${result.chunks.length}');
     if (topChunk != null) {
-      print('[ROUTER] Top score: ${topScore.toStringAsFixed(3)}');
+      LogService.to.log('[ROUTER] Top score: ${topScore.toStringAsFixed(3)}');
     }
-    print('[ROUTER] Requires LLM: ${result.requiresLlm}');
-    print('[ROUTER] Intent: ${result.intent}');
+    LogService.to.log('[ROUTER] Requires LLM: ${result.requiresLlm}');
+    LogService.to.log('[ROUTER] Intent: ${result.intent}');
 
     lastIsFromKb = result.isFromKb;
     lastRequiresLlm = result.requiresLlm;
@@ -254,7 +255,7 @@ class InferenceRouterService extends GetxService {
         topScore >= 0.50 &&
         topChunk.chunk.text.length > 50) {
       if (_chunkAnswersQuery(correctedQuery, topChunk.chunk)) {
-        print('[ROUTER] Direct bypass triggered → returning chunk text for definition query');
+        LogService.to.log('[ROUTER] Direct bypass triggered → returning chunk text for definition query');
         final sourcesText = _buildSourcesBlock(result.chunks.map((sc) => sc.chunk).toList());
         yield '${_cleanChunkText(topChunk.chunk.text)}$sourcesText';
         bypassSuccess = true;
@@ -262,7 +263,7 @@ class InferenceRouterService extends GetxService {
         // Chunk doesn't answer it — check chunks 2 and 3
         for (final chunk in result.chunks.skip(1)) {
           if (_chunkAnswersQuery(correctedQuery, chunk.chunk)) {
-            print('[ROUTER] Found relevant definition in chunk ${result.chunks.indexOf(chunk) + 1}');
+            LogService.to.log('[ROUTER] Found relevant definition in chunk ${result.chunks.indexOf(chunk) + 1}');
             final sourcesText = _buildSourcesBlock([chunk.chunk]);
             yield '${_cleanChunkText(chunk.chunk.text)}$sourcesText';
             bypassSuccess = true;
@@ -275,7 +276,7 @@ class InferenceRouterService extends GetxService {
         _emit(QueryStage.done, 'Done');
         return;
       }
-      print('[ROUTER] Definition bypass failed relevance check → falling through to LLM');
+      LogService.to.log('[ROUTER] Definition bypass failed relevance check → falling through to LLM');
     }
 
     // ── Route Decision ────────────────────────────────────────────────────────
@@ -298,7 +299,7 @@ class InferenceRouterService extends GetxService {
         _emit(QueryStage.done, 'Done');
         return;
       } else {
-        print('[ROUTER] Path A bypass failed relevance check → falling through to LLM');
+        LogService.to.log('[ROUTER] Path A bypass failed relevance check → falling through to LLM');
         requiresLlm = true;
       }
     }
@@ -321,11 +322,11 @@ class InferenceRouterService extends GetxService {
       return;
     }
     // FIX: Use correctedQuery (not originalQuery) for the LLM prompt
-    print('[ROUTER] Using corrected query for LLM: "$correctedQuery"');
+    LogService.to.log('[ROUTER] Using corrected query for LLM: "$correctedQuery"');
     final fullPrompt = _buildLlama3Prompt(ragContext, correctedQuery);
 
-    debugPrint('[ROUTER] Using ${backend.name} backend');
-    debugPrint('[ROUTER] Context chunks: ${result.chunks.length}');
+    LogService.to.log('[ROUTER] Using ${backend.name} backend');
+    LogService.to.log('[ROUTER] Context chunks: ${result.chunks.length}');
 
     String fullLlmOutput = '';
     try {
@@ -349,7 +350,7 @@ class InferenceRouterService extends GetxService {
 
       // ── Post-process: sanitize then validate ─────────────────────────────
       final sanitized = OnDeviceInferenceService.sanitizeResponse(fullLlmOutput);
-      debugPrint('[ROUTER] Raw length: ${fullLlmOutput.length} → Sanitized: ${sanitized.length}');
+      LogService.to.log('[ROUTER] Raw length: ${fullLlmOutput.length} → Sanitized: ${sanitized.length}');
 
       final validated = _validateOutput(sanitized, result, correctedQuery);
 
@@ -378,7 +379,7 @@ class InferenceRouterService extends GetxService {
         .join('\n');
 
     if (cleanContext.isEmpty) {
-      print('[ROUTER] WARNING: Empty context after cleaning');
+      LogService.to.log('[ROUTER] WARNING: Empty context after cleaning');
     }
 
     return '<|begin_of_text|>'
@@ -442,7 +443,7 @@ class InferenceRouterService extends GetxService {
     ];
     for (final p in leakPatterns) {
       if (cleaned.contains(p)) {
-        debugPrint('[VALIDATOR] ❌ Prompt leakage — discarding');
+        LogService.to.log('[VALIDATOR] ❌ Prompt leakage — discarding');
         return _heuristicFallback(ragResult, correctedQuery);
       }
     }
@@ -459,13 +460,13 @@ class InferenceRouterService extends GetxService {
     }
     final maxRepeat = counts.values.isEmpty ? 0 : counts.values.reduce((a, b) => a > b ? a : b);
     if (maxRepeat >= 3) {
-      debugPrint('[VALIDATOR] ❌ Repetition loop detected (max=$maxRepeat) — discarding');
+      LogService.to.log('[VALIDATOR] ❌ Repetition loop detected (max=$maxRepeat) — discarding');
       return _heuristicFallback(ragResult, correctedQuery);
     }
 
     // Guard 4: LLM explicitly says no answer
     if (cleaned.isEmpty || cleaned.toLowerCase().contains('no answer available') || cleaned.toLowerCase().contains('not available in the provided documents')) {
-      debugPrint('[VALIDATOR] LLM said no answer — trying heuristic fallback');
+      LogService.to.log('[VALIDATOR] LLM said no answer — trying heuristic fallback');
       return _heuristicFallback(ragResult, correctedQuery);
     }
 
@@ -510,11 +511,11 @@ class InferenceRouterService extends GetxService {
     }
     
     if (!hasGrounding) {
-      debugPrint('[VALIDATOR] ❌ No grounding overlap with ANY chunk — discarding');
+      LogService.to.log('[VALIDATOR] ❌ No grounding overlap with ANY chunk — discarding');
       return _heuristicFallback(ragResult, correctedQuery);
     }
 
-    debugPrint('[VALIDATOR] ✅ Answer accepted (${cleaned.length} chars)');
+    LogService.to.log('[VALIDATOR] ✅ Answer accepted (${cleaned.length} chars)');
     return cleaned;
   }
 

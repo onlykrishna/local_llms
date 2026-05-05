@@ -6,33 +6,18 @@ import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import 'core/theme/app_theme.dart';
 import 'core/constants/app_constants.dart';
-import 'core/services/settings_service.dart';
-import 'core/services/fallback_dataset_service.dart';
+import 'core/services/log_service.dart';
 import 'domain/entities/chat_message.dart';
-import 'domain/services/on_device_inference_service.dart';
-import 'domain/services/inference_router.dart';
+import 'domain/entities/download_state.dart';
+import 'data/models/pdf_document_meta.dart';
 import 'presentation/bindings/chat_binding.dart';
 import 'presentation/pages/chat_page.dart';
 import 'presentation/pages/settings_page.dart';
+import 'presentation/pages/startup_page.dart';
 import 'presentation/widgets/app_drawer.dart';
-
-import 'domain/entities/download_state.dart';
-import 'domain/services/model_download_service.dart';
-import 'presentation/controllers/model_manager_controller.dart';
-import 'core/embedding_service.dart';
-import 'domain/document_ingestion_service.dart';
-import 'domain/rag_retrieval_service.dart';
-import 'domain/source_citation_service.dart';
-import 'objectbox.g.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
-
-import 'domain/kb_embedding_service.dart';
-import 'data/document_chunk.dart';
-import 'data/models/pdf_document_meta.dart';
-import 'core/services/bundled_pdf_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -41,6 +26,9 @@ void main() async {
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
+
+  // Pre-startup core services
+  Get.put(LogService());
 
   try {
     await GetStorage.init();
@@ -55,7 +43,7 @@ void main() async {
       await Hive.openBox<String>(AppConstants.bundledPdfHashesBoxName);
       await Hive.openBox(AppConstants.settingsBoxName);
     } catch (e) {
-      debugPrint('🚨 Hive box corrupt, clearing: $e');
+      LogService.to.log('🚨 Hive box corrupt, clearing: $e');
       await Hive.deleteBoxFromDisk(AppConstants.chatBoxName);
       await Hive.openBox<ChatMessage>(AppConstants.chatBoxName);
       await Hive.openBox<PdfDocumentMeta>(AppConstants.pdfLibraryBoxName);
@@ -64,63 +52,10 @@ void main() async {
     }
     await Hive.openBox<DownloadState>(AppConstants.downloadBoxName);
   } catch (e) {
-    debugPrint('🚨 Storage Init Error: $e');
+    LogService.to.log('🚨 Storage Init Error: $e');
   }
-
-  await _initServices();
 
   runApp(const OfflineAIDemoApp());
-}
-
-Future<void> _initServices() async {
-  final overallSw = Stopwatch()..start();
-  try {
-    // 1. Core Services (Parallel)
-    await Future.wait([
-      Get.putAsync(() => SettingsService().init()),
-      Get.putAsync(() => ModelDownloadService().init()),
-      Get.putAsync(() => FallbackDatasetService().init()),
-    ]).timeout(const Duration(seconds: 15));
-
-    // 2. Heavy I/O - ObjectBox MUST be first
-    final docsDir = await getApplicationDocumentsDirectory();
-    final store = await openStore(directory: p.join(docsDir.path, "obx-rag"));
-    Get.put(store);
-    debugPrint('[STARTUP] ✅ ObjectBox ready');
-
-    // 3. Embedding model MUST be fully loaded before KB embedding
-    final embeddingService = EmbeddingService();
-    await embeddingService.init();
-    Get.put(embeddingService);
-    debugPrint('[STARTUP] ✅ EmbeddingService ready');
-    
-    // 4. Heavy LLM & Utility Services
-    Get.put(OnDeviceInferenceService());
-    Get.put(SourceCitationService());
-    Get.put(DocumentIngestionService(store, embeddingService));
-    Get.put(RagRetrievalService(store, embeddingService));
-    
-    // 5. Bundled PDF Service & KB Embedding
-    final bundledPdfService = Get.put(BundledPdfService());
-    await bundledPdfService.init();
-    
-    final kbService = KbEmbeddingService(embeddingService, store.box<DocumentChunk>());
-    Get.put(kbService);
-    await kbService.initializeKb(); // Wait for KB to be ready
-    debugPrint('[STARTUP] ✅ KB embedding complete');
-
-    // 6. Router & Controller
-    await Get.putAsync(() => InferenceRouterService().init());
-    Get.lazyPut(() => ModelManagerController());
-    
-    // 7. Warm-start LLM in background (non-blocking)
-    unawaited(Get.find<OnDeviceInferenceService>().warmup()); // Using warmup() as it matches existing code
-    debugPrint('[STARTUP] ✅ LLM warm start triggered');
-    
-    debugPrint('🚀 All services initialized in ${overallSw.elapsedMilliseconds}ms');
-  } catch (e) {
-    debugPrint('🚨 Background Service Init Error: $e');
-  }
 }
 
 class OfflineAIDemoApp extends StatelessWidget {
@@ -134,8 +69,18 @@ class OfflineAIDemoApp extends StatelessWidget {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.system,
-      initialBinding: ChatBinding(),
-      home: const HomeScreen(),
+      initialRoute: '/',
+      getPages: [
+        GetPage(
+          name: '/', 
+          page: () => const StartupPage(),
+        ),
+        GetPage(
+          name: '/home', 
+          page: () => const HomeScreen(),
+          binding: ChatBinding(),
+        ),
+      ],
     );
   }
 }

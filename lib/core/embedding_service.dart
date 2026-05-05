@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:path_provider/path_provider.dart';
 import 'embedding_isolate.dart';
+import 'services/log_service.dart';
 
 class EmbeddingService {
   SendPort? _isolateSendPort;
@@ -39,7 +40,7 @@ class EmbeddingService {
     if (response.isError) throw Exception('Failed to init embedding isolate: ${response.data}');
     
     _isolateReady.complete();
-    debugPrint('🚀 [EmbeddingService] Isolate ready and model loaded');
+    LogService.to.log('🚀 [EmbeddingService] Isolate ready and model loaded');
   }
 
   Future<List<double>> embed(String text) async {

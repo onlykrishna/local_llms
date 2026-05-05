@@ -6,6 +6,7 @@ import '../data/document_chunk.dart';
 import '../data/hardcoded_kb.dart';
 import '../core/embedding_service.dart';
 import '../objectbox.g.dart';
+import '../core/services/log_service.dart';
 
 class KbEmbeddingService {
   final EmbeddingService _embedder;
@@ -23,7 +24,7 @@ class KbEmbeddingService {
   Future<void> initializeKb() async {
     if (_isInitialized) return;
 
-    debugPrint('[KB_EMBED] initializeKb() called');
+    LogService.to.log('[KB_EMBED] initializeKb() called');
 
     final prefs = await SharedPreferences.getInstance();
     final storedVersion = prefs.getString(_kbVersionKey);
@@ -32,21 +33,21 @@ class KbEmbeddingService {
       DocumentChunk_.isHardcoded.equals(true)
     ).build().find();
 
-    debugPrint('[KB_EMBED] Existing KB chunks in DB: ${existing.length}');
-    debugPrint('[KB_EMBED] Expected KB chunks: ${kKnowledgeBase.length}');
-    debugPrint('[KB_EMBED] EmbeddingService ready: ${_embedder.isInitialized}');
+    LogService.to.log('[KB_EMBED] Existing KB chunks in DB: ${existing.length}');
+    LogService.to.log('[KB_EMBED] Expected KB chunks: ${kKnowledgeBase.length}');
+    LogService.to.log('[KB_EMBED] EmbeddingService ready: ${_embedder.isInitialized}');
 
     final isUpToDate = storedVersion == kKbVersion &&
                        existing.length >= kKnowledgeBase.length;
 
     if (isUpToDate) {
-      debugPrint('[KB_EMBED] KB up-to-date (version=$kKbVersion, chunks=${existing.length}) — skipping re-embed');
+      LogService.to.log('[KB_EMBED] KB up-to-date (version=$kKbVersion, chunks=${existing.length}) — skipping re-embed');
       
       final hl06 = _box.query(DocumentChunk_.tags.equals('hl_06')).build().findFirst();
       if (hl06 != null) {
-        debugPrint('[KB_DIAG] hl_06 is in DB. Embedding size: ${hl06.embedding?.length}');
+        LogService.to.log('[KB_DIAG] hl_06 is in DB. Embedding size: ${hl06.embedding?.length}');
       } else {
-        debugPrint('[KB_DIAG] hl_06 MISSING from DB despite being "up-to-date"!');
+        LogService.to.log('[KB_DIAG] hl_06 MISSING from DB despite being "up-to-date"!');
       }
 
       _isInitialized = true;
@@ -56,7 +57,7 @@ class KbEmbeddingService {
       return;
     }
 
-    debugPrint('[KB_EMBED] KB version mismatch or missing chunks — re-embedding (stored=$storedVersion, current=$kKbVersion)');
+    LogService.to.log('[KB_EMBED] KB version mismatch or missing chunks — re-embedding (stored=$storedVersion, current=$kKbVersion)');
 
     // Remove old KB chunks
     _statusController.add(KbInitStatus.loading(
@@ -76,15 +77,15 @@ class KbEmbeddingService {
         currentEntry: entry.question,
       ));
 
-      debugPrint('[KB_EMBED] Embedding ${i+1}/$total: ${entry.id}');
+      LogService.to.log('[KB_EMBED] Embedding ${i+1}/$total: ${entry.id}');
       final embedding = await _embedder.embed(entry.embeddingText);
 
       final norm = _computeNorm(embedding);
       final allZero = embedding.every((v) => v == 0.0);
-      debugPrint('[KB_EMBED] ✅ Embedded ${entry.id}: dims=${embedding.length} norm=${norm.toStringAsFixed(3)} allZero=$allZero');
+      LogService.to.log('[KB_EMBED] ✅ Embedded ${entry.id}: dims=${embedding.length} norm=${norm.toStringAsFixed(3)} allZero=$allZero');
 
       if (allZero || embedding.isEmpty) {
-        debugPrint('[KB_EMBED] ❌ FAILED embedding for ${entry.id} — skipping');
+        LogService.to.log('[KB_EMBED] ❌ FAILED embedding for ${entry.id} — skipping');
         continue;
       }
 
@@ -104,14 +105,14 @@ class KbEmbeddingService {
         createdAt: DateTime.now(),
       );
       final savedId = _box.put(chunk);
-      debugPrint('[KB_EMBED] 💾 Saved chunk id=$savedId for entry=${entry.id}');
+      LogService.to.log('[KB_EMBED] 💾 Saved chunk id=$savedId for entry=${entry.id}');
     }
 
     await prefs.setString(_kbVersionKey, kKbVersion);
     _isInitialized = true;
     
     final finalCount = _box.query(DocumentChunk_.isHardcoded.equals(true)).build().count();
-    debugPrint('[KB_EMBED] ✅ DONE. Total KB chunks in DB: $finalCount');
+    LogService.to.log('[KB_EMBED] ✅ DONE. Total KB chunks in DB: $finalCount');
     
     _statusController.add(KbInitStatus.ready(
       message: 'Knowledge base initialized — $finalCount facts loaded',
