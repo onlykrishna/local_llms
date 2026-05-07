@@ -95,14 +95,15 @@ class RagRetrievalService extends GetxService {
   static const Map<QueryIntent, List<String>> _intentKeywords = {
     QueryIntent.documents: [
       'kyc', 'pan', 'aadhaar', 'bank statement', 'itr',
-      'document', 'proof', 'identity', 'address',
+      'document', 'proof', 'identity', 'address', 'requirement',
       'gst', 'balance sheet', 'passport', 'photograph', 'form',
+      'criteria', 'eligibility', 'needed', 'mandatory', 'checklist',
     ],
     QueryIntent.fees: ['fee', 'charge', 'processing', 'cost', 'payment', 'applicable'],
     QueryIntent.eligibility: ['age', 'income', 'salary', 'cibil', 'score', 'eligible', 'criteria'],
     QueryIntent.interest: ['%', 'percent', 'rate', 'interest', 'roi', 'pa'],
     QueryIntent.tenure: ['tenure', 'year', 'month', 'duration', 'period', 'repay'],
-    QueryIntent.definition: ['loan', 'used', 'purpose', 'means', 'refers', 'is a'],
+    QueryIntent.definition: ['loan', 'purpose', 'means', 'refers', 'is a', 'defined', 'abbreviation', 'stands for', 'description'],
     QueryIntent.process: ['apply', 'process', 'step', 'procedure', 'how', 'application'],
     QueryIntent.other: [],
   };
@@ -144,16 +145,19 @@ class RagRetrievalService extends GetxService {
   // Header chunks (like "HOME LOAN FAQ HOME LOAN FAQ") have no useful content.
   bool _isHeaderChunk(String text) {
     final t = text.trim();
-    if (t.length < 40) return true; // Too short to be an answer
-    if (t == t.toUpperCase() && t.length < 100) return true; // ALL CAPS short text
-    // Detect repeated content (e.g. "Foo Bar Foo Bar")
-    if (t.length > 20) {
-      final half = t.substring(0, t.length ~/ 2).trim();
-      if (half.length > 10 && t.contains(half) &&
-          t.indexOf(half) != t.lastIndexOf(half)) {
-        return true;
-      }
+    if (t.length < 80) return true; // Higher threshold for content
+    
+    // Catch repetitive titles even with slight variations
+    final lower = t.toLowerCase();
+    final words = lower.split(RegExp(r'\s+'));
+    if (words.length >= 4 && words.length < 20) {
+      final mid = words.length ~/ 2;
+      final firstPart = words.sublist(0, mid).join(' ');
+      final secondPart = words.sublist(mid).join(' ');
+      if (firstPart.contains(secondPart) || secondPart.contains(firstPart)) return true;
     }
+
+    if (t == t.toUpperCase() && t.length < 150) return true; 
     return false;
   }
 
@@ -239,7 +243,34 @@ class RagRetrievalService extends GetxService {
     final boosted = deduped.map((sc) {
       final kwBoost = _computeKeywordBoost(sc.chunk.text, intent);
       final tagBoost = _tagBoost(sc.chunk, typoCorrected);
-      final newScore = sc.score * kwBoost + tagBoost;
+      
+      // NEW: Position Boost — definitions are usually in the first 6 chunks
+      double posBoost = 1.0;
+      if (sc.chunk.chunkIndex >= 0 && sc.chunk.chunkIndex <= 5) {
+        posBoost = 1.25; // 25% boost for early document content
+      }
+      
+      // NEW: Definition Sentence Boost - ONLY if it contains query subject
+      double defBoost = 1.0;
+      if (intent == QueryIntent.definition) {
+        final textLower = sc.chunk.text.toLowerCase();
+        // Remove common question words to find actual subjects
+        final questionWords = ['what', 'is', 'are', 'how', 'does', 'do', 'can', 'a', 'the', 'of', 'in', 'for', 'to'];
+        final subjects = typoCorrected.split(' ')
+            .where((w) => w.length > 2 && !questionWords.contains(w))
+            .toList();
+            
+        bool hasQuerySubject = subjects.any((s) => textLower.contains(s));
+        
+        // Match phrases like "EMI stands for", "LTV is a term", "Business loan is a type"
+        final startsWithDef = RegExp(r'^(a|an|the|working|loan|emi|ltv|unsecured)\s+[\w\s&()]+\s+(is|stands for|refers to|means|is defined as)', caseSensitive: false);
+        
+        if (hasQuerySubject && startsWithDef.hasMatch(sc.chunk.text)) {
+          defBoost = 1.40; // Stronger, targeted boost
+        }
+      }
+
+      final newScore = (sc.score * kwBoost * posBoost * defBoost) + tagBoost;
       return ScoredChunk(
           chunk: sc.chunk, score: newScore, cosine: sc.cosine, kw: kwBoost, boost: tagBoost);
     }).toList();
@@ -275,24 +306,50 @@ class RagRetrievalService extends GetxService {
     }
 
     // ── Step 8: Build context for ALL paths (including bypass fallback) ──
-    final int chunkLimit = (intent == QueryIntent.definition) ? 5 : 3;
+    final int chunkLimit = 3; // Reduced for faster LLM processing
     
     var scoredChunks = boosted.where((s) => s.score >= threshold).toList();
     
     if (intent == QueryIntent.definition) {
       final definitionalPhrases = [
         'stands for', 'is defined as', 'abbreviated as',
-        'refers to', 'full form', 'short for',
+        'refers to', 'full form', 'short for', 'means',
+        'is a term', 'is a type', 'is a form', 'represents', 'denotes',
       ];
       
-      // Partition: definition chunks first, others second
-      final defChunks = scoredChunks.where((c) => 
-          definitionalPhrases.any((p) => 
-              c.chunk.text.toLowerCase().contains(p))).toList();
-      final otherChunks = scoredChunks.where((c) => 
-          !definitionalPhrases.any((p) => 
-              c.chunk.text.toLowerCase().contains(p))).toList();
+      // Extract subject words to prevent cross-topic definition promotion
+      final stopWords = {'what', 'is', 'are', 'how', 'does', 'do', 'can', 'tell', 'me', 'about', 'explain', 'define', 'a', 'the', 'for', 'of', 'in', 'an', 'and', 'meaning'};
+      final queryWords = typoCorrected.toLowerCase().split(RegExp(r'\W+'))
+          .where((w) => w.length > 2 && !stopWords.contains(w))
+          .toList();
+
+      // Partition: only promote definitions that actually mention at least one query subject in proximity
+      final defChunks = scoredChunks.where((c) {
+        final text = c.chunk.text.toLowerCase();
+        
+        bool foundProximity = false;
+        if (queryWords.isNotEmpty) {
+          for (final phrase in definitionalPhrases) {
+            final phrasePos = text.indexOf(phrase);
+            if (phrasePos == -1) continue;
+            
+            // At least ONE subject should be near the definition phrase
+            for (final subject in queryWords) {
+              final subjectPos = text.indexOf(subject);
+              if (subjectPos != -1 && (subjectPos - phrasePos).abs() <= 100) {
+                foundProximity = true;
+                break;
+              }
+            }
+            if (foundProximity) break;
+          }
+        }
+        
+        final matchesSubject = queryWords.isNotEmpty && queryWords.any((w) => text.contains(w));
+        return foundProximity && matchesSubject;
+      }).toList();
       
+      final otherChunks = scoredChunks.where((c) => !defChunks.contains(c)).toList();
       scoredChunks = [...defChunks, ...otherChunks];
     }
 
@@ -304,7 +361,8 @@ class RagRetrievalService extends GetxService {
     LogService.to.log('[RAG] Final chunks: ${validSelected.length}');
 
     // ── Step 9: High-confidence bypass → serve directly ────────────────────
-    final bypassThreshold = resolvedScope != null ? 0.65 : 0.85;
+    // Definitions use a lower threshold for bypass because proximity matching is high-confidence
+    final bypassThreshold = (intent == QueryIntent.definition) ? 0.70 : (resolvedScope != null ? 0.65 : 0.85);
     if (top.score >= bypassThreshold) {
       LogService.to.log('[RAG] → HIGH CONFIDENCE BYPASS (score ${top.score.toStringAsFixed(2)})');
       return RagResult.directBypass(
@@ -326,7 +384,7 @@ class RagRetrievalService extends GetxService {
     );
   }
 
-  bool _chunkAnswersQuery(String queryLower, DocumentChunk chunk) {
+  bool chunkAnswersQuery(String queryLower, DocumentChunk chunk) {
     final chunkLower = chunk.text.toLowerCase();
     
     // Simple subject extraction: remove question words
@@ -337,13 +395,21 @@ class RagRetrievalService extends GetxService {
         .where((w) => w.length > 2 && !questionWords.contains(w))
         .toList();
     
-    // The chunk must contain AT LEAST 60% of the meaningful query words
-    if (queryWords.isEmpty) return true;
-    
     int matchCount = queryWords.where((w) => chunkLower.contains(w)).length;
     double matchRatio = matchCount / queryWords.length;
-    
-    return matchRatio >= 0.6;
+
+    // Relaxed threshold: 30% is enough if it's a semantic match
+    if (matchRatio >= 0.3) return true;
+
+    // Intent-based fallback: Who/How/Requirements
+    final lower = chunkLower;
+    if (queryLower.contains('who') && (lower.contains('individual') || lower.contains('professional') || lower.contains('salaried') || lower.contains('self employed') || lower.contains('eligible'))) return true;
+    if (queryLower.contains('how') && (lower.contains('process') || lower.contains('step') || lower.contains('apply') || lower.contains('method'))) return true;
+    if (queryLower.contains('document') || queryLower.contains('require')) {
+       if (lower.contains('kyc') || lower.contains('proof') || lower.contains('checklist') || lower.contains('pan')) return true;
+    }
+
+    return matchRatio >= 0.5;
   }
 
   String _augmentQueryForIntent(String query, QueryIntent intent) {
@@ -366,18 +432,18 @@ class RagRetrievalService extends GetxService {
     
     // Primary search with augmented query
     final augmented = _augmentQueryForIntent(query, intent);
-    var results = await _vectorSearch(augmented, scope, 20);
+    var results = await _vectorSearch(augmented, scope, 50); // Cast a wide net
     
     var filtered = results.where((sc) => !_isHeaderChunk(sc.chunk.text)).toList();
     filtered = _deduplicateChunks(filtered);
     
     // Check if any result actually answers the query
-    bool hasRelevant = filtered.any((c) => _chunkAnswersQuery(query.toLowerCase(), c.chunk));
+    bool hasRelevant = filtered.any((c) => chunkAnswersQuery(query.toLowerCase(), c.chunk));
     
     if (!hasRelevant) {
       LogService.to.log('[RAG] No relevant chunks found in primary search. Running secondary search...');
       // Secondary search: drop scope restriction, use raw query
-      results = await _vectorSearch(query, null, 20);
+      results = await _vectorSearch(query, null, 50);
       filtered = results.where((sc) => !_isHeaderChunk(sc.chunk.text)).toList();
       filtered = _deduplicateChunks(filtered);
     }
@@ -404,7 +470,7 @@ class RagRetrievalService extends GetxService {
       final cosine = (emb != null && emb.isNotEmpty)
           ? _cosineSimilarity(queryEmbedding, emb)
           : (1.0 - result.score);
-      double score = cosine * 0.45;
+      double score = cosine * 0.70; // Higher multiplier for better threshold alignment
       if (chunk.isHardcoded) score *= 1.5;
       return ScoredChunk(chunk: chunk, score: score, cosine: cosine, kw: 1.0, boost: 0.0);
     }).toList();

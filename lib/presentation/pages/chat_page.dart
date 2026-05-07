@@ -15,26 +15,28 @@ class ChatPage extends GetView<ChatController> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return Stack(
       children: [
         Column(
           children: [
-            const SizedBox(height: 100), 
+            const SizedBox(height: 100),
             const BackendStatusBar(),
             _buildKbStatusBar(), // KB Status Panel
-            
+
             Expanded(
               child: Obx(() {
-                if (controller.messages.isEmpty && !controller.isGenerating.value) {
+                if (controller.messages.isEmpty &&
+                    !controller.isGenerating.value) {
                   return const _EmptyChatView();
                 }
                 return ListView.builder(
                   controller: controller.scrollController,
-                  reverse: true, 
+                  reverse: true,
                   physics: const BouncingScrollPhysics(),
-                  itemCount: controller.messages.length + (controller.isGenerating.value ? 1 : 0),
-                  padding: const EdgeInsets.only(bottom: 24, top: 12),
+                  itemCount: controller.messages.length +
+                      (controller.isGenerating.value ? 1 : 0),
+                  padding: const EdgeInsets.only(bottom: 0, top: 12),
                   itemBuilder: (context, index) {
                     if (index == 0 && controller.isGenerating.value) {
                       if (controller.currentResponseText.value.isEmpty) {
@@ -42,11 +44,13 @@ class ChatPage extends GetView<ChatController> {
                             .fadeIn(duration: 400.ms)
                             .slideY(begin: 0.1, end: 0);
                       } else {
-                        return Animate(child: _StreamingBubble(controller: controller))
+                        return Animate(
+                                child: _StreamingBubble(controller: controller))
                             .fadeIn(duration: 300.ms);
                       }
                     }
-                    final msgIndex = controller.isGenerating.value ? index - 1 : index;
+                    final msgIndex =
+                        controller.isGenerating.value ? index - 1 : index;
                     final msg = controller.messages[msgIndex];
                     return Animate(child: MessageBubble(message: msg))
                         .fadeIn(duration: 400.ms)
@@ -69,20 +73,24 @@ class ChatPage extends GetView<ChatController> {
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: theme.colorScheme.primary.withOpacity(0.3)),
-                    boxShadow: [
-                      BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4)),
-                    ]
-                  ),
+                      color: theme.colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: theme.colorScheme.primary.withOpacity(0.3)),
+                      boxShadow: [
+                        BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4)),
+                      ]),
                   child: Row(
                     children: [
                       SizedBox(
-                        width: 20, 
-                        height: 20, 
-                        child: CircularProgressIndicator(strokeWidth: 2, color: theme.colorScheme.primary)
-                      ),
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: theme.colorScheme.primary)),
                       const SizedBox(width: 16),
                       Expanded(
                         child: Column(
@@ -90,13 +98,19 @@ class ChatPage extends GetView<ChatController> {
                           children: [
                             Text(
                               'Initializing local engine...',
-                              style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold, fontSize: 13),
+                              style: TextStyle(
+                                  color: theme.colorScheme.onSurface,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13),
                             ),
                             const SizedBox(height: 4),
                             Obx(() => Text(
-                              controller.loadingStage.value,
-                              style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.w500, fontSize: 12),
-                            )),
+                                  controller.loadingStage.value,
+                                  style: TextStyle(
+                                      color: theme.colorScheme.primary,
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 12),
+                                )),
                           ],
                         ),
                       ),
@@ -126,18 +140,25 @@ class ChatPage extends GetView<ChatController> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
                 color: Colors.purple.withOpacity(0.15),
-                border: Border(bottom: BorderSide(color: Colors.purple.withOpacity(0.3))),
+                border: Border(
+                    bottom: BorderSide(color: Colors.purple.withOpacity(0.3))),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(children: [
                     const SizedBox(
-                      width: 12, height: 12,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF9B59B6)),
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Color(0xFF9B59B6)),
                     ),
                     const SizedBox(width: 8),
-                    Text(status.message, style: const TextStyle(color: Colors.white70, fontSize: 11, fontFamily: 'Inter')),
+                    Text(status.message,
+                        style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 11,
+                            fontFamily: 'Inter')),
                   ]),
                   const SizedBox(height: 4),
                   ClipRRect(
@@ -145,13 +166,20 @@ class ChatPage extends GetView<ChatController> {
                     child: LinearProgressIndicator(
                       value: status.progress,
                       backgroundColor: Colors.white10,
-                      valueColor: const AlwaysStoppedAnimation(Color(0xFF9B59B6)),
+                      valueColor:
+                          const AlwaysStoppedAnimation(Color(0xFF9B59B6)),
                       minHeight: 2,
                     ),
                   ),
                   if (status.currentEntry != null) ...[
                     const SizedBox(height: 2),
-                    Text(status.currentEntry!, style: const TextStyle(color: Colors.white38, fontSize: 9, fontFamily: 'Inter', overflow: TextOverflow.ellipsis), maxLines: 1),
+                    Text(status.currentEntry!,
+                        style: const TextStyle(
+                            color: Colors.white38,
+                            fontSize: 9,
+                            fontFamily: 'Inter',
+                            overflow: TextOverflow.ellipsis),
+                        maxLines: 1),
                   ],
                 ],
               ),
@@ -160,18 +188,26 @@ class ChatPage extends GetView<ChatController> {
             return Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               child: Row(children: [
-                const Icon(Icons.check_circle_outline, size: 12, color: Color(0xFF2ECC71)),
+                const Icon(Icons.check_circle_outline,
+                    size: 12, color: Color(0xFF2ECC71)),
                 const SizedBox(width: 6),
-                Text(status.message, style: const TextStyle(color: Color(0xFF2ECC71), fontSize: 10, fontFamily: 'Inter')),
+                Text(status.message,
+                    style: const TextStyle(
+                        color: Color(0xFF2ECC71),
+                        fontSize: 10,
+                        fontFamily: 'Inter')),
               ]),
             );
           case KbInitStage.error:
             return Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               child: Row(children: [
-                const Icon(Icons.error_outline, size: 12, color: Colors.redAccent),
+                const Icon(Icons.error_outline,
+                    size: 12, color: Colors.redAccent),
                 const SizedBox(width: 6),
-                Text(status.message, style: const TextStyle(color: Colors.redAccent, fontSize: 10)),
+                Text(status.message,
+                    style:
+                        const TextStyle(color: Colors.redAccent, fontSize: 10)),
               ]),
             );
         }
@@ -190,16 +226,16 @@ class ChatPage extends GetView<ChatController> {
         }
 
         final icon = switch (status.stage) {
-          QueryStage.expanding  => Icons.manage_search,
-          QueryStage.embedding  => Icons.bubble_chart,
-          QueryStage.searching  => Icons.travel_explore,
-          QueryStage.reranking  => Icons.sort,
+          QueryStage.expanding => Icons.manage_search,
+          QueryStage.embedding => Icons.bubble_chart,
+          QueryStage.searching => Icons.travel_explore,
+          QueryStage.reranking => Icons.sort,
           QueryStage.generating => Icons.psychology,
-          QueryStage.done       => Icons.check,
+          QueryStage.done => Icons.check,
         };
 
         return Padding(
-          padding: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.only(bottom: 4),
           child: Row(children: [
             const _PulsingDot(color: Color(0xFF9B59B6)),
             const SizedBox(width: 10),
@@ -210,9 +246,15 @@ class ChatPage extends GetView<ChatController> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(status.message, style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
+                  Text(status.message,
+                      style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold)),
                   if (status.detail != null)
-                    Text(status.detail!, style: const TextStyle(color: Colors.white38, fontSize: 10)),
+                    Text(status.detail!,
+                        style: const TextStyle(
+                            color: Colors.white38, fontSize: 10)),
                 ],
               ),
             ),
@@ -227,13 +269,14 @@ class ChatPage extends GetView<ChatController> {
     return Container(
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
-        border: Border(top: BorderSide(color: theme.colorScheme.outline.withOpacity(0.2))),
+        border: Border(
+            top: BorderSide(color: theme.colorScheme.outline.withOpacity(0.2))),
       ),
       child: SafeArea(
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
               child: Column(
                 children: [
                   _buildQueryStatusIndicator(),
@@ -244,19 +287,26 @@ class ChatPage extends GetView<ChatController> {
                           decoration: BoxDecoration(
                             color: theme.colorScheme.surfaceContainer,
                             borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: theme.colorScheme.outline.withOpacity(0.5)),
+                            border: Border.all(
+                                color:
+                                    theme.colorScheme.outline.withOpacity(0.5)),
                           ),
                           child: TextField(
                             controller: controller.inputController,
                             maxLines: 4,
                             minLines: 1,
-                            style: TextStyle(color: theme.colorScheme.onSurface),
+                            style:
+                                TextStyle(color: theme.colorScheme.onSurface),
                             textInputAction: TextInputAction.send,
                             onSubmitted: (_) => controller.sendMessage(),
                             decoration: InputDecoration(
                               hintText: 'Synthesizing with local knowledge...',
-                              hintStyle: TextStyle(color: theme.colorScheme.onSurfaceVariant.withOpacity(0.5), fontSize: 13),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              hintStyle: TextStyle(
+                                  color: theme.colorScheme.onSurfaceVariant
+                                      .withOpacity(0.5),
+                                  fontSize: 13),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 12),
                               border: InputBorder.none,
                               filled: false,
                             ),
@@ -265,12 +315,20 @@ class ChatPage extends GetView<ChatController> {
                       ),
                       const SizedBox(width: 12),
                       Obx(() => FloatingActionButton(
-                        heroTag: 'chat_send_btn',
-                        mini: true,
-                        backgroundColor: controller.isGenerating.value ? theme.colorScheme.error : theme.colorScheme.primary,
-                        onPressed: controller.isGenerating.value ? controller.stopGeneration : controller.sendMessage,
-                        child: Icon(controller.isGenerating.value ? Icons.stop_rounded : Icons.send_rounded, color: theme.colorScheme.onPrimary),
-                      )),
+                            heroTag: 'chat_send_btn',
+                            mini: true,
+                            backgroundColor: controller.isGenerating.value
+                                ? theme.colorScheme.error
+                                : theme.colorScheme.primary,
+                            onPressed: controller.isGenerating.value
+                                ? controller.stopGeneration
+                                : controller.sendMessage,
+                            child: Icon(
+                                controller.isGenerating.value
+                                    ? Icons.stop_rounded
+                                    : Icons.send_rounded,
+                                color: theme.colorScheme.onPrimary),
+                          )),
                     ],
                   ),
                 ],
@@ -290,27 +348,44 @@ class _PulsingDot extends StatefulWidget {
   State<_PulsingDot> createState() => _PulsingDotState();
 }
 
-class _PulsingDotState extends State<_PulsingDot> with SingleTickerProviderStateMixin {
+class _PulsingDotState extends State<_PulsingDot>
+    with SingleTickerProviderStateMixin {
   late AnimationController _ctrl;
   late Animation<double> _anim;
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(duration: const Duration(milliseconds: 900), vsync: this)..repeat(reverse: true);
+    _ctrl = AnimationController(
+        duration: const Duration(milliseconds: 900), vsync: this)
+      ..repeat(reverse: true);
     _anim = Tween<double>(begin: 0.3, end: 1.0).animate(_ctrl);
   }
+
   @override
   Widget build(BuildContext context) {
     return FadeTransition(
       opacity: _anim,
       child: Container(
-        width: 8, height: 8,
-        decoration: BoxDecoration(color: widget.color, shape: BoxShape.circle, boxShadow: [BoxShadow(color: widget.color.withOpacity(0.6), blurRadius: 6, spreadRadius: 2)]),
+        width: 8,
+        height: 8,
+        decoration: BoxDecoration(
+            color: widget.color,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                  color: widget.color.withOpacity(0.6),
+                  blurRadius: 6,
+                  spreadRadius: 2)
+            ]),
       ),
     );
   }
+
   @override
-  void dispose() { _ctrl.dispose(); super.dispose(); }
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
 }
 
 class _StreamingBubble extends StatelessWidget {
@@ -333,7 +408,8 @@ class _StreamingBubble extends StatelessWidget {
                 color: theme.colorScheme.primary.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.auto_awesome, size: 16, color: theme.colorScheme.primary),
+              child: Icon(Icons.auto_awesome,
+                  size: 16, color: theme.colorScheme.primary),
             ),
             const SizedBox(width: 8),
             Flexible(
@@ -349,8 +425,10 @@ class _StreamingBubble extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainer.withOpacity(0.8),
-                      border: Border.all(color: theme.colorScheme.outline.withOpacity(0.3)),
+                      color:
+                          theme.colorScheme.surfaceContainer.withOpacity(0.8),
+                      border: Border.all(
+                          color: theme.colorScheme.outline.withOpacity(0.3)),
                       borderRadius: const BorderRadius.only(
                         topLeft: Radius.circular(16),
                         topRight: Radius.circular(16),
@@ -359,13 +437,13 @@ class _StreamingBubble extends StatelessWidget {
                       ),
                     ),
                     child: Obx(() => Text(
-                      controller.currentResponseText.value,
-                      style: TextStyle(
-                        color: theme.colorScheme.onSurface,
-                        fontSize: 15,
-                        height: 1.6,
-                      ),
-                    )),
+                          controller.currentResponseText.value,
+                          style: TextStyle(
+                            color: theme.colorScheme.onSurface,
+                            fontSize: 15,
+                            height: 1.6,
+                          ),
+                        )),
                   ),
                 ),
               ),
@@ -394,7 +472,8 @@ class _EmptyChatView extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: theme.colorScheme.primary.withOpacity(0.05),
-                border: Border.all(color: theme.colorScheme.primary.withOpacity(0.1)),
+                border: Border.all(
+                    color: theme.colorScheme.primary.withOpacity(0.1)),
                 boxShadow: [
                   BoxShadow(
                     color: theme.colorScheme.primary.withOpacity(0.1),
@@ -403,11 +482,15 @@ class _EmptyChatView extends StatelessWidget {
                   )
                 ],
               ),
-              child: Icon(Icons.auto_awesome, size: 72, color: theme.colorScheme.primary.withOpacity(0.6)),
-            ).animate(onPlay: (c) => c.repeat(reverse: true))
-             .scale(duration: const Duration(seconds: 2), begin: const Offset(1, 1), end: const Offset(1.15, 1.15))
-             .fadeIn(duration: 800.ms),
-            
+              child: Icon(Icons.auto_awesome,
+                  size: 72, color: theme.colorScheme.primary.withOpacity(0.6)),
+            )
+                .animate(onPlay: (c) => c.repeat(reverse: true))
+                .scale(
+                    duration: const Duration(seconds: 2),
+                    begin: const Offset(1, 1),
+                    end: const Offset(1.15, 1.15))
+                .fadeIn(duration: 800.ms),
             const SizedBox(height: 48),
             Text(
               'Grounded Intelligence Ready',
@@ -418,7 +501,6 @@ class _EmptyChatView extends StatelessWidget {
                 letterSpacing: -1.0,
               ),
             ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.3, end: 0),
-            
             const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 56),
@@ -432,15 +514,17 @@ class _EmptyChatView extends StatelessWidget {
                 ),
               ),
             ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.3, end: 0),
-            
             const SizedBox(height: 32),
             _buildVerifiedQuestions(context),
-
             const SizedBox(height: 44),
-            Icon(Icons.keyboard_arrow_down_rounded, color: theme.colorScheme.primary.withOpacity(0.3))
-              .animate(onPlay: (c) => c.repeat())
-              .move(duration: 800.ms, begin: const Offset(0, 0), end: const Offset(0, 10))
-              .fadeOut(duration: 800.ms),
+            Icon(Icons.keyboard_arrow_down_rounded,
+                    color: theme.colorScheme.primary.withOpacity(0.3))
+                .animate(onPlay: (c) => c.repeat())
+                .move(
+                    duration: 800.ms,
+                    begin: const Offset(0, 0),
+                    end: const Offset(0, 10))
+                .fadeOut(duration: 800.ms),
           ],
         ),
       ),
@@ -473,9 +557,15 @@ class _EmptyChatView extends StatelessWidget {
           runSpacing: 8,
           alignment: WrapAlignment.center,
           children: [
-            _QuestionChip(label: 'What is an EMI?', onTap: () => ask('What is an EMI?')),
-            _QuestionChip(label: 'Home Loan Eligibility?', onTap: () => ask('Who can avail a home loan?')),
-            _QuestionChip(label: 'Business Loan Docs?', onTap: () => ask('What documents are needed for a working capital loan?')),
+            _QuestionChip(
+                label: 'What is an EMI?', onTap: () => ask('What is an EMI?')),
+            _QuestionChip(
+                label: 'Home Loan Eligibility?',
+                onTap: () => ask('Who can avail a home loan?')),
+            _QuestionChip(
+                label: 'Business Loan Docs?',
+                onTap: () => ask(
+                    'What documents are needed for a working capital loan?')),
           ],
         ).animate().fadeIn(delay: 600.ms),
       ],

@@ -58,6 +58,7 @@ dev_dependencies:
   json_serializable: ^6.8.0
   objectbox_generator: ^4.0.0
   analyzer: ^6.4.1
+  flutter_launcher_icons: ^0.13.1
 
 flutter:
   uses-material-design: true
@@ -79,3 +80,11 @@ flutter:
     - assets/pdfs/unsecured_business_loan_faqs.pdf
     - assets/pdfs/loan_against_property_faqs.pdf
     # END AUTO-GENERATED PDF ASSETS
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/logo_icon.png"
+
+  adaptive_icon_background: "#ffffff"
+  adaptive_icon_foreground: "assets/images/logo_icon.png"

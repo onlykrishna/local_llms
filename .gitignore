@@ -62,3 +62,9 @@ sensitive_config/
 *.apk
 !lib/presentation/assets/images/placeholder.png 
 
+# Local build artifacts
+ios/build/
+
+# Scratch scripts
+test_prox*.dart
+

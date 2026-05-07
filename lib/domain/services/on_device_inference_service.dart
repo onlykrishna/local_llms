@@ -116,10 +116,10 @@ class OnDeviceInferenceService extends GetxService {
     try {
       final responsePort = ReceivePort();
       final mParams = ModelParams(
-        gpuLayers: 0,
+        gpuLayers: 99, // Enable Metal on iOS for massive speed boost
         contextSize: 2048,
-        numberOfThreads: 3,
-        batchSize: 64,
+        numberOfThreads: 6, // Increased for faster processing on modern chips
+        batchSize: 512, // Faster prompt processing
       );
 
       _isolateSendPort!.send(IsolateRequest('init', {
@@ -168,19 +168,17 @@ class OnDeviceInferenceService extends GetxService {
 
     // ── Inference parameters tuned to prevent repetition loops ──────────────
     final gParams = GenerationParams(
-      maxTokens: 256,
-      temp: 0.15,       // Non-zero prevents deterministic loops
+      maxTokens: 200,   // Reduced from 256 for faster response
+      temp: 0.15,       
       topP: 0.85,
       topK: 30,
-      penalty: 1.3,     // Aggressive repetition penalty
+      penalty: 1.15,     // Slightly reduced for speed
       stopSequences: [
         '<|eot_id|>',
         '<|end_of_text|>',
         '<|im_end|>',
         '<|endoftext|>',
-        '\n\nQuestion:',
-        '\n\nQ:',
-        '\n\nContext:',
+        '###', // Common separator
       ],
     );
 
@@ -226,9 +224,6 @@ class OnDeviceInferenceService extends GetxService {
       '<|end_of_text|>',
       '<|im_end|>',
       '<|endoftext|>',
-      '\n\nQuestion:',
-      '\n\nQ:',
-      '\n\nContext:',
     ]) {
       final idx = raw.indexOf(stop);
       if (idx != -1) {

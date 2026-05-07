@@ -95,6 +95,12 @@ class InferenceRouterService extends GetxService {
         'refers to',
         'full form',
         'short for',
+        'means',
+        'is a term',
+        'is a type',
+        'is a form',
+        'represents',
+        'denotes',
       ];
       
       bool foundUnambiguousDefinition = false;
@@ -106,8 +112,8 @@ class InferenceRouterService extends GetxService {
           final indicatorPos = chunkLower.indexOf(indicator);
           if (indicatorPos == -1) continue;
           
-          // Use 80 chars proximity as requested
-          if ((subjectPos - indicatorPos).abs() <= 80) {
+          // Use 100 chars proximity for better recall on complex sentences
+          if ((subjectPos - indicatorPos).abs() <= 100) {
             foundUnambiguousDefinition = true;
             break;
           }
@@ -254,22 +260,25 @@ class InferenceRouterService extends GetxService {
         topChunk != null &&
         topScore >= 0.50 &&
         topChunk.chunk.text.length > 50) {
-      if (_chunkAnswersQuery(correctedQuery, topChunk.chunk)) {
-        LogService.to.log('[ROUTER] Direct bypass triggered → returning chunk text for definition query');
-        final sourcesText = _buildSourcesBlock(result.chunks.map((sc) => sc.chunk).toList());
-        yield '${_cleanChunkText(topChunk.chunk.text)}$sourcesText';
-        bypassSuccess = true;
-      } else {
-        // Chunk doesn't answer it — check chunks 2 and 3
-        for (final chunk in result.chunks.skip(1)) {
-          if (_chunkAnswersQuery(correctedQuery, chunk.chunk)) {
-            LogService.to.log('[ROUTER] Found relevant definition in chunk ${result.chunks.indexOf(chunk) + 1}');
-            final sourcesText = _buildSourcesBlock([chunk.chunk]);
-            yield '${_cleanChunkText(chunk.chunk.text)}$sourcesText';
-            bypassSuccess = true;
-            break;
+      String finalResponse = _cleanChunkText(topChunk.chunk.text);
+      
+      // Merge second chunk if it's also highly relevant, related, and NOT redundant
+      if (result.chunks.length > 1) {
+        final second = result.chunks[1];
+        if (second.score > 0.60 && _chunkAnswersQuery(correctedQuery, second.chunk)) {
+          final secondText = _cleanChunkText(second.chunk.text);
+          // Check for redundancy (simple word overlap)
+          if (!_isRedundant(finalResponse, secondText)) {
+            finalResponse += "\n\n$secondText";
           }
         }
+      }
+
+      if (_chunkAnswersQuery(correctedQuery, topChunk.chunk)) {
+        LogService.to.log('[ROUTER] Direct bypass triggered (merged) → returning verified text');
+        final sourcesText = _buildSourcesBlock(result.chunks.take(2).map((sc) => sc.chunk).toList());
+        yield '$finalResponse$sourcesText';
+        bypassSuccess = true;
       }
       
       if (bypassSuccess) {
@@ -312,7 +321,12 @@ class InferenceRouterService extends GetxService {
     currentBackend.value = backend;
 
     // Use the context from result (which we now ensure exists even for bypass)
-    final int contextLimit = (result.intent == QueryIntent.definition) ? 5 : 3;
+    final modelId = _settings.selectedModelId.value;
+    int contextLimit = 3;
+    if (modelId == 'llama3.2' || modelId == 'qwen2.5') {
+      contextLimit = 4;
+    }
+    
     final contextChunks = result.chunks.take(contextLimit).toList();
     final ragContext = contextChunks.map((s) => _cleanChunkText(s.chunk.text)).join('\n---\n');
 
@@ -371,46 +385,16 @@ class InferenceRouterService extends GetxService {
   // ── Prompt Builder (Llama 3 Instruct format) ──────────────────────────────
   /// Minimal, focused prompt. One instruction paragraph. No redundancy.
   String _buildLlama3Prompt(String context, String query) {
-    // Filter empty lines from context before sending to LLM
-    final cleanContext = context
-        .split('\n')
-        .map((l) => l.trim())
-        .where((l) => l.isNotEmpty)
-        .join('\n');
-
-    if (cleanContext.isEmpty) {
-      LogService.to.log('[ROUTER] WARNING: Empty context after cleaning');
-    }
-
     return '<|begin_of_text|>'
         '<|start_header_id|>system<|end_header_id|>\n\n'
-        'You are a document answer extractor. You will be given context passages retrieved from \n'
-        'official PDF documents. Your ONLY job is to answer the user\'s question using information \n'
-        'explicitly present in the provided context. \n'
-        'Rules you must follow without exception:\n'
-        '- ONLY use information from the <context> blocks below.\n'
-        '- If the context contains PARTIAL information relevant to the question, \n'
-        '  provide that partial information clearly stating it is from the documents.\n'
-        '- If the context contains ZERO relevant information, respond with exactly:\n'
-        '  \'This information is not available in the provided documents.\'\n'
-        '- Do NOT refuse to answer if ANY relevant information exists in context.\n'
-        '- Do NOT use your training knowledge, general knowledge, or make inferences.\n'
-        '- Do NOT add explanations, examples, or elaborations beyond what the context states.\n'
-        '- Do NOT say phrases like \'Based on my knowledge\' or \'Generally speaking\'.\n'
-        '- Quote or closely paraphrase the context. Do not invent numbers, dates, or conditions.\n'
+        'You are an expert assistant. Answer the user question accurately using ONLY the provided context. '
+        'If the context contains a definition or explanation, extract and synthesize it clearly. '
+        'If the answer is completely missing from the context, say it is not available.\n'
         '<|eot_id|>'
         '<|start_header_id|>user<|end_header_id|>\n\n'
-        'STRICT INSTRUCTION: Only answer from the context below. \n'
-        'Context is from official PDFs. No outside knowledge allowed.\n'
-        'If the context does not contain the answer, say: \n'
-        '\'This information is not available in the provided documents.\'\n\n'
-        '<context>\n'
-        '$cleanContext\n'
-        '</context>\n\n'
+        'Context:\n$context\n\n'
         'Question: $query\n'
-        'Important: If the context contains any information related to the question, \n'
-        'use it. Only say not available if context has zero relevant content.\n'
-        'Answer (from context only):'
+        'Answer:'
         '<|eot_id|>'
         '<|start_header_id|>assistant<|end_header_id|>\n\n';
   }
@@ -420,6 +404,19 @@ class InferenceRouterService extends GetxService {
         .replaceAll(RegExp(r'[■●•▪︎➤]'), '')
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
+  }
+
+  /// Checks if two strings are significantly similar to avoid duplicate text in bypass.
+  bool _isRedundant(String s1, String s2) {
+    final w1 = s1.toLowerCase().split(RegExp(r'\W+')).where((w) => w.length > 3).toSet();
+    final w2 = s2.toLowerCase().split(RegExp(r'\W+')).where((w) => w.length > 3).toSet();
+    if (w1.isEmpty || w2.isEmpty) return false;
+    
+    final intersection = w1.intersection(w2).length;
+    final union = w1.union(w2).length;
+    final similarity = intersection / union;
+    
+    return similarity > 0.50; // 50% overlap is considered redundant
   }
 
   // ── Output Validator ──────────────────────────────────────────────────────
@@ -493,7 +490,7 @@ class InferenceRouterService extends GetxService {
     // Grounding check — verify output contains at least one key term from ANY chunk
     final outputWords = cleaned.toLowerCase()
         .split(RegExp(r'\W+'))
-        .where((w) => w.length > 4)
+        .where((w) => w.length >= 3)
         .toSet();
     
     bool hasGrounding = false;
@@ -501,10 +498,10 @@ class InferenceRouterService extends GetxService {
       final chunkWords = chunk.chunk.text
           .toLowerCase()
           .split(RegExp(r'\W+'))
-          .where((w) => w.length > 4)
+          .where((w) => w.length >= 3)
           .toSet();
       final overlap = chunkWords.intersection(outputWords).length;
-      if (overlap >= 3) {
+      if (overlap >= 1) {
         hasGrounding = true;
         break;
       }
