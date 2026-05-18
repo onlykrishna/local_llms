@@ -1,0 +1,18 @@
+{
+  "file_version": "1",
+  "firebase_project_id": "flutter-ai-chat-app-74880",
+  "platforms": {
+    "android": {
+      "default": {
+        "app_id": "1:1006344330597:android:48f79d98e1b9c11e5c958c",
+        "file_output": "android/app/google-services.json"
+      }
+    },
+    "ios": {
+      "default": {
+        "app_id": "1:1006344330597:ios:2e4212b011f8fbd55c958c",
+        "file_output": "ios/Runner/GoogleService-Info.plist"
+      }
+    }
+  }
+}

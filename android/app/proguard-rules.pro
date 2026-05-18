@@ -17,7 +17,7 @@
 -keep class com.syncfusion.** { *; }
 
 # Keep model classes
--keep class com.company.aiapp.** { *; }
+-keep class com.aeologic.adhoc.aiapp.** { *; }
 
 # Dart / Flutter obfuscation rules
 -keepattributes Signature
