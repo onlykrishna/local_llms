@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../controllers/pdf_chat_controller.dart';
-import '../../../core/services/embedding_service.dart';
 import 'widgets/pdf_list_panel.dart';
 import 'widgets/upload_progress_card.dart';
 import 'widgets/pdf_empty_state.dart';

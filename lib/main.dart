@@ -2,6 +2,7 @@ import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -41,20 +42,36 @@ void main() async {
   };
 
   // 5. App Check
-  await FirebaseAppCheck.instance.activate(
-    androidProvider: kDebugMode 
-        ? AndroidProvider.debug 
-        : AndroidProvider.playIntegrity,
-    appleProvider: kDebugMode 
-        ? AppleProvider.debug 
-        : AppleProvider.appAttest,
-  );
+  try {
+    await FirebaseAppCheck.instance.activate(
+      androidProvider: kDebugMode 
+          ? AndroidProvider.debug 
+          : AndroidProvider.playIntegrity,
+      appleProvider: kDebugMode 
+          ? AppleProvider.debug 
+          : AppleProvider.appAttest,
+    );
+  } catch (e, stack) {
+    debugPrint("Firebase App Check activation failed: $e");
+    FirebaseCrashlytics.instance.recordError(e, stack, reason: 'App Check activation failed');
+  }
 
   // 6. Local storage init
   await GetStorage.init();
 
   // 7. Register services in dependency order
-  await Get.putAsync(() async => StorageService());
+  final storage = await Get.putAsync(() async => StorageService());
+
+  // Synchronize Firebase Auth session with local storage on startup
+  try {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await storage.saveUid(user.uid);
+      debugPrint("🔐 main: Active Firebase user session synchronized with local storage (UID: ${user.uid})");
+    }
+  } catch (e) {
+    debugPrint("⚠️ main: Failed to sync Firebase user session: $e");
+  }
   Get.put(ThemeController());
   Get.put(ConnectivityService());
   Get.put(ApiProviderService());

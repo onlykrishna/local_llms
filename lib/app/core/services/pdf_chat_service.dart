@@ -195,7 +195,7 @@ class PdfChatService extends GetxService {
       return (chunk, score);
     }).toList();
 
-    // 4. Sort descending, apply threshold, take topK
+    // 4. Sort descending
     scored.sort((a, b) => b.$2.compareTo(a.$2));
     
     debugPrint('🔍 RAG Search: found ${allChunks.length} total chunks.');
@@ -203,10 +203,45 @@ class PdfChatService extends GetxService {
       debugPrint('🔍 Top score: ${scored.first.$2.toStringAsFixed(3)}');
     }
 
-    final filtered = scored
-        .where((s) => s.$2 >= threshold)
+    final lowerQuery = query.toLowerCase();
+    final isGeneralQuery = lowerQuery.contains('summarise') ||
+                           lowerQuery.contains('summarize') ||
+                           lowerQuery.contains('summary') ||
+                           lowerQuery.contains('key findings') ||
+                           lowerQuery.contains('main topics') ||
+                           lowerQuery.contains('overview') ||
+                           lowerQuery.contains('what is this document') ||
+                           lowerQuery.contains('what are the key');
+
+    // Use a dynamic threshold: 0.05 for general/summary queries, 0.30 for specific factual questions
+    final activeThreshold = isGeneralQuery ? 0.05 : threshold;
+
+    var filtered = scored
+        .where((s) => s.$2 >= activeThreshold)
         .take(topK)
         .toList();
+
+    // If it is a general/summary query or no chunks passed the threshold, ensure we include 
+    // the introduction chunks (chunkIndex == 0 or 1) from the documents to guarantee relevant context!
+    if ((isGeneralQuery || filtered.isEmpty) && allChunks.isNotEmpty) {
+      final introChunks = allChunks.where((c) => c.chunkIndex == 0 || c.chunkIndex == 1).toList();
+      
+      for (final introChunk in introChunks) {
+        final alreadyExists = filtered.any((s) => s.$1.id == introChunk.id);
+        if (!alreadyExists) {
+          final scoredItem = scored.firstWhere(
+            (s) => s.$1.id == introChunk.id,
+            orElse: () => (introChunk, 0.15),
+          );
+          filtered.add(scoredItem);
+        }
+      }
+      
+      // Re-sort descending by score and limit to dynamic length
+      filtered.sort((a, b) => b.$2.compareTo(a.$2));
+      final limit = isGeneralQuery ? (topK + 2) : topK;
+      filtered = filtered.take(limit).toList();
+    }
 
     final topChunks = filtered.map((s) => s.$1).toList();
     final citations = filtered.map((s) => ChunkCitation(
@@ -236,15 +271,31 @@ class PdfChatService extends GetxService {
              '${chunk.text}';
     }).join('\n\n---\n\n');
 
-    const systemPrompt =
-      'You are a precise document assistant. Answer questions using ONLY '
-      'the provided context. If the answer is not in the context, say so '
-      'clearly. Do not fabricate information. '
-      'Format your response in Markdown. '
-      'At the end of your response, include a "Sources used:" section '
-      'that lists each source you actually used, formatted as:\n'
-      '- [Source N] FileName, page X\n'
-      'Only list sources whose content you referenced in your answer.';
+    final lowerQuestion = question.toLowerCase();
+    final isGeneralQuery = lowerQuestion.contains('summarise') ||
+                           lowerQuestion.contains('summarize') ||
+                           lowerQuestion.contains('summary') ||
+                           lowerQuestion.contains('key findings') ||
+                           lowerQuestion.contains('main topics') ||
+                           lowerQuestion.contains('overview') ||
+                           lowerQuestion.contains('what is this document') ||
+                           lowerQuestion.contains('what are the key');
+
+    final systemPrompt = isGeneralQuery
+      ? 'You are a helpful and precise document assistant. The user has asked for a summary, overview, key findings, or main topics of the document. '
+        'Based on the provided context chunks (which represent the introductory and most significant sections of the document), '
+        'provide a well-structured, professional, and comprehensive response. '
+        'Organize your answer using clear bullet points or numbered lists. '
+        'At the end of your response, include a "Sources used:" section '
+        'listing the files and pages referenced.'
+      : 'You are a precise document assistant. Answer questions using ONLY '
+        'the provided context. If the answer is not in the context, say so '
+        'clearly. Do not fabricate information. '
+        'Format your response in Markdown. '
+        'At the end of your response, include a "Sources used:" section '
+        'that lists each source you actually used, formatted as:\n'
+        '- [Source N] FileName, page X\n'
+        'Only list sources whose content you referenced in your answer.';
 
     final userPrompt =
       'Context:\n$contextBlock\n\n'

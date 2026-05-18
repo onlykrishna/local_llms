@@ -8,4 +8,5 @@ abstract class AppRoutes {
   static const PDF_CHAT = '/pdf-chat';
   static const ONBOARDING = '/onboarding';
   static const SETTINGS = '/settings';
+  static const SETUP = '/setup';
 }

@@ -1,12 +1,23 @@
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:get/get.dart';
+import '../../../../app/core/services/pdf_chat_service.dart';
 import '../../../../app/core/services/storage_service.dart';
 import '../../../../app/routes/app_pages.dart';
 
 class AuthController extends GetxController {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final StorageService _storage = Get.find<StorageService>();
+
+  @override
+  void onInit() {
+    super.onInit();
+    if (kDebugMode) {
+      debugPrint("🛠️ AuthController: kDebugMode is true. Configuring Firebase Auth to disable app verification for testing to bypass browser reCAPTCHA popup.");
+      _auth.setSettings(appVerificationDisabledForTesting: true);
+    }
+  }
 
   // Reactive state
   final RxBool isLoading = false.obs;
@@ -83,7 +94,24 @@ class AuthController extends GetxController {
         await FirebaseCrashlytics.instance.setUserIdentifier(uid);
 
         isLoading.value = false;
-        Get.offAllNamed(AppRoutes.CHAT);
+
+        // Skip setup screen if already set up
+        final setupComplete = _storage.getBool('setupComplete') ?? false;
+        if (setupComplete) {
+          Get.offAllNamed(AppRoutes.CHAT);
+        } else {
+          try {
+            final docs = await Get.find<PdfChatService>().loadDocuments();
+            if (docs.isNotEmpty) {
+              await _storage.setBool('setupComplete', true);
+              Get.offAllNamed(AppRoutes.CHAT);
+              return;
+            }
+          } catch (e) {
+            debugPrint("⚠️ Error checking setup documents on sign-in: $e");
+          }
+          Get.offAllNamed(AppRoutes.SETUP);
+        }
       }
     } on FirebaseAuthException catch (e) {
       isLoading.value = false;

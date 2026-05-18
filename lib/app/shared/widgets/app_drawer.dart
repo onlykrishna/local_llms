@@ -4,7 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/services/embedding_service.dart';
 import '../../core/services/storage_service.dart';
 import '../../routes/app_pages.dart';
-import '../../core/theme/app_theme.dart';
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});

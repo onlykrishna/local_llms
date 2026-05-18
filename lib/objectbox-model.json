@@ -1,0 +1,126 @@
+{
+  "_note1": "KEEP THIS FILE! Check it into a version control system (VCS) like git.",
+  "_note2": "ObjectBox manages crucial IDs for your object model. See docs for details.",
+  "_note3": "If you have VCS merge conflicts, you must resolve them according to ObjectBox docs.",
+  "entities": [
+    {
+      "id": "1:6743515377923470014",
+      "lastPropertyId": "10:5685490630347077517",
+      "name": "PdfDocEntity",
+      "properties": [
+        {
+          "id": "1:251787373215407834",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:4864988941053330667",
+          "name": "docId",
+          "type": 9
+        },
+        {
+          "id": "3:8977205109900564350",
+          "name": "fileName",
+          "type": 9
+        },
+        {
+          "id": "4:644950367235080876",
+          "name": "downloadUrl",
+          "type": 9
+        },
+        {
+          "id": "5:545327034724104983",
+          "name": "storagePath",
+          "type": 9
+        },
+        {
+          "id": "6:3003671882469570202",
+          "name": "pageCount",
+          "type": 6
+        },
+        {
+          "id": "7:2880915175261320099",
+          "name": "chunkCount",
+          "type": 6
+        },
+        {
+          "id": "8:8712645058790138027",
+          "name": "uploadedAt",
+          "type": 9
+        },
+        {
+          "id": "9:2538939198073879992",
+          "name": "uid",
+          "type": 9
+        },
+        {
+          "id": "10:5685490630347077517",
+          "name": "status",
+          "type": 9
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "2:3730699861825310924",
+      "lastPropertyId": "8:3976099006879636669",
+      "name": "VectorChunkEntity",
+      "properties": [
+        {
+          "id": "1:3124908780606531993",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:4595008651109486017",
+          "name": "docId",
+          "type": 9
+        },
+        {
+          "id": "3:6864106445849490652",
+          "name": "fileName",
+          "type": 9
+        },
+        {
+          "id": "4:805420363941595106",
+          "name": "pageNumber",
+          "type": 6
+        },
+        {
+          "id": "5:8250923499954428710",
+          "name": "chunkIndex",
+          "type": 6
+        },
+        {
+          "id": "6:3759157658169426625",
+          "name": "text",
+          "type": 9
+        },
+        {
+          "id": "7:7043705550665375572",
+          "name": "uid",
+          "type": 9
+        },
+        {
+          "id": "8:3976099006879636669",
+          "name": "embeddingCsv",
+          "type": 9
+        }
+      ],
+      "relations": []
+    }
+  ],
+  "lastEntityId": "2:3730699861825310924",
+  "lastIndexId": "0:0",
+  "lastRelationId": "0:0",
+  "lastSequenceId": "0:0",
+  "modelVersion": 5,
+  "modelVersionParserMinimum": 5,
+  "retiredEntityUids": [],
+  "retiredIndexUids": [],
+  "retiredPropertyUids": [],
+  "retiredRelationUids": [],
+  "version": 1
+}

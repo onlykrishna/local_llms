@@ -5,7 +5,6 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../../../core/services/api_provider_service.dart';
 import '../../../core/models/ai_provider.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/theme/theme_controller.dart';
 import '../../../core/services/storage_service.dart';
 import '../../../routes/app_pages.dart';
 
@@ -15,7 +14,6 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final themeCtrl = Get.find<ThemeController>();
     final apiService = Get.find<ApiProviderService>();
 
     return Scaffold(

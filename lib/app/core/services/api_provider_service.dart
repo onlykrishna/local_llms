@@ -19,6 +19,16 @@ class ApiProviderService extends GetxService {
   String get _openAiKey => dotenv.env['OPENAI_API_KEY'] ?? '';
   String get _groqKey   => dotenv.env['GROQ_API_KEY'] ?? '';
 
+  @override
+  void onInit() {
+    super.onInit();
+    if (_openAiKey.isNotEmpty && _openAiKey.startsWith('sk-')) {
+      activeProvider.value = AiProvider.openai;
+    } else if (_groqKey.isNotEmpty) {
+      activeProvider.value = AiProvider.groq;
+    }
+  }
+
   void switchProvider(AiProvider provider) {
     activeProvider.value = provider;
     // Analytics

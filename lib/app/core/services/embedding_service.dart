@@ -108,6 +108,24 @@ class EmbeddingService extends GetxService {
     }
   }
 
+  /// Non-blocking connection check. Logs invalid API keys on startup instead of throwing.
+  Future<Map<String, dynamic>> validateAndLog() async {
+    try {
+      final vec = await embedText('test connection');
+      final result = {
+        'success': true,
+        'dimensions': vec.length,
+        'provider': activeProviderName,
+        'model': isOpenAiActive ? _openAiModel : 'all-MiniLM-L6-v2',
+      };
+      debugPrint('✅ Embedding startup validation successful: $activeProviderName (${vec.length} dimensions)');
+      return result;
+    } catch (e) {
+      debugPrint('❌ Startup Embedding API key validation failed (Non-Fatal): $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
   // ────────────────────────────────────
   // PRIVATE — OpenAI implementation
   // ────────────────────────────────────

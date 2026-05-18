@@ -10,6 +10,7 @@ import '../modules/pdf_chat/views/pdf_chat_screen.dart';
 import '../modules/pdf_chat/bindings/pdf_chat_binding.dart';
 import '../modules/onboarding/views/onboarding_screen.dart';
 import '../modules/settings/views/settings_screen.dart';
+import '../modules/setup/views/setup_screen.dart';
 
 part 'app_routes.dart';
 
@@ -49,6 +50,12 @@ class AppPages {
     GetPage(
       name: AppRoutes.SETTINGS,
       page: () => const SettingsScreen(),
+      transition: Transition.cupertino,
+    ),
+    GetPage(
+      name: AppRoutes.SETUP,
+      page: () => const SetupScreen(),
+      binding: PdfChatBinding(),
       transition: Transition.cupertino,
     ),
   ];

@@ -10,6 +10,7 @@ import '../../../core/services/pdf_chat_service.dart';
 import '../../../core/services/embedding_service.dart';
 import '../../../core/services/analytics_service.dart';
 import '../../../core/services/storage_service.dart';
+import '../../../routes/app_pages.dart';
 
 enum PdfChatRole { user, assistant }
 
@@ -99,19 +100,25 @@ class PdfChatController extends GetxController {
   Future<void> _initWithValidation() async {
     try {
       final embeddingService = Get.find<EmbeddingService>();
-      final validation = await embeddingService.validateConnection();
+      final validation = await embeddingService.validateAndLog();
       debugPrint('🔍 Embedding validation: $validation');
     } catch (e) {
       debugPrint('⚠️ Embedding validation failed: $e');
     }
   }
 
-  // ── Load all uploaded PDFs ──
   Future<void> loadDocuments() async {
     isLoadingDocs.value = true;
     try {
       final docs = await _service.loadDocuments();
       documents.assignAll(docs);
+      if (docs.isNotEmpty) {
+        final storage = Get.find<StorageService>();
+        await storage.setBool('setupComplete', true);
+        if (Get.currentRoute == AppRoutes.SETUP) {
+          Get.offAllNamed(AppRoutes.CHAT);
+        }
+      }
     } catch (e) {
       Get.snackbar('Error', 'Failed to load documents: $e',
           snackPosition: SnackPosition.BOTTOM);
@@ -160,6 +167,13 @@ class PdfChatController extends GetxController {
         },
       );
       documents.insert(0, doc);
+
+      try {
+        final storage = Get.find<StorageService>();
+        await storage.setBool('setupComplete', true);
+      } catch (e) {
+        debugPrint("⚠️ Failed to write setupComplete on upload: $e");
+      }
 
       HapticFeedback.mediumImpact();
 
