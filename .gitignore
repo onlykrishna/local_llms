@@ -1,0 +1,66 @@
+# Environment
+.env
+*.env
+
+# Android signing
+android/key.properties
+*.jks
+*.keystore
+android/upload-keystore.jks
+
+# iOS signing
+ios/Certificates/
+*.p12
+*.mobileprovision
+
+# Firebase config files
+google-services.json
+GoogleService-Info.plist
+
+# Build artifacts
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+
+# Debug info (from obfuscated builds)
+build/debug-info/
+
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# VS Code
+.vscode/
+
+# Test coverage
+/coverage/
+
+# Symbolization related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio build artifacts
+/android/app/debug
+/android/app/profile
+/android/app/release
