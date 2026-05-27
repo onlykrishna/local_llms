@@ -43,17 +43,17 @@ class PdfEmptyState extends GetView<PdfChatController> {
               ),
             ),
             const SizedBox(height: 24),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              alignment: WrapAlignment.center,
-              children: suggestions.map((text) {
-                return ActionChip(
-                  label: Text(text),
-                  onPressed: () => controller.sendQuestion(text),
-                );
-              }).toList(),
-            ),
+            // Wrap(
+            //   spacing: 8,
+            //   runSpacing: 8,
+            //   alignment: WrapAlignment.center,
+            //   children: suggestions.map((text) {
+            //     return ActionChip(
+            //       label: Text(text),
+            //       onPressed: () => controller.sendQuestion(text),
+            //     );
+            //   }).toList(),
+            // ),
           ],
         ),
       ),
