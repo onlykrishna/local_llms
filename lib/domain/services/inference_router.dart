@@ -58,8 +58,10 @@ class InferenceRouterService extends GetxService {
   };
 
   bool _isOnTopic(String query) {
-    final q = query.toLowerCase();
-    if (q.length < 4) return true;
+    final q = query.toLowerCase().trim();
+    if (q.isEmpty) return false;
+    // NOTE: Do NOT auto-approve short queries — 'Car', 'AI', 'Sun' etc. must
+    // still match a known financial topic. Only skip the check for empty input.
     return _knownTopics.any((topic) => q.contains(topic));
   }
 
@@ -76,10 +78,34 @@ class InferenceRouterService extends GetxService {
     
     if (queryWords.isEmpty) return true;
     
-    // Check keyword match ratio
+    // Intent-aware shortcut: documents query
+    if (queryLower.contains('document') || queryLower.contains('require') ||
+        (queryLower.contains('need') && queryLower.contains('loan'))) {
+      if (chunkLower.contains('documents required') ||
+          chunkLower.contains('kyc') ||
+          chunkLower.contains('bank statement') ||
+          chunkLower.contains('itr') ||
+          chunkLower.contains('financial statement') ||
+          chunkLower.contains('proof') ||
+          chunkLower.contains('checklist')) {
+        return true;
+      }
+    }
+
+    // Intent-aware shortcut: eligibility query
+    if (queryLower.contains('eligib') || queryLower.contains('who can') ||
+        queryLower.contains('qualify')) {
+      if (chunkLower.contains('eligible') || chunkLower.contains('eligibility') ||
+          chunkLower.contains('salaried') || chunkLower.contains('individual') ||
+          chunkLower.contains('self-employed') || chunkLower.contains('criteria')) {
+        return true;
+      }
+    }
+
+    // Check keyword match ratio — relaxed to 40%
     int matchCount = queryWords.where((w) => chunkLower.contains(w)).length;
     double matchRatio = matchCount / queryWords.length;
-    if (matchRatio < 0.6) return false;
+    if (matchRatio < 0.40) return false;
 
     // DEFINITION INTENT BLOCK
     final isDefinitionQuery = queryLower.contains('what is') || 
@@ -124,6 +150,18 @@ class InferenceRouterService extends GetxService {
     }
     
     return true;
+  }
+
+  /// Finds the best chunk among all retrieved chunks for the given query.
+  /// This is used to avoid cases where the top-scored chunk is semantically
+  /// similar but doesn't actually answer the question intent.
+  ScoredChunk? _findBestAnsweringChunk(String queryLower, List<ScoredChunk> chunks) {
+    for (final sc in chunks) {
+      if (_chunkAnswersQuery(queryLower, sc.chunk)) {
+        return sc;
+      }
+    }
+    return null;
   }
 
   final _deterministicMatcher = DeterministicKbMatcher();
@@ -297,18 +335,47 @@ class InferenceRouterService extends GetxService {
 
     bool requiresLlm = result.requiresLlm;
     if (!requiresLlm) {
-      // Path A bypass check
-      if (topChunk != null && _chunkAnswersQuery(correctedQuery, topChunk.chunk)) {
-        if (result.sources.isEmpty) {
-          yield _buildNoAnswerResponse(correctedQuery);
-        } else {
-          final sourcesText = _buildSourcesBlock(result.chunks.map((sc) => sc.chunk).toList());
-          yield '${result.content}$sourcesText';
+      // Path A bypass: scan ALL retrieved chunks for the best answering one,
+      // not just the top-scored chunk (which may be semantically close but
+      // miss the actual query intent e.g. repayment chunk for a docs query).
+      final bestChunk = _findBestAnsweringChunk(correctedQuery.toLowerCase(), result.chunks);
+      if (bestChunk != null) {
+        final answerText = _cleanChunkText(bestChunk.chunk.text);
+        // Merge a second relevant chunk ONLY if it is from the SAME document scope
+        // and adds genuinely new info. This prevents LAP chunks from being merged
+        // into Working Capital Loan answers just because they mention the same words.
+        String mergedAnswer = answerText;
+        final bestScope = bestChunk.chunk.sourceDocumentTag;
+        for (final sc in result.chunks) {
+          if (sc == bestChunk) continue;
+          // Scope guard: skip chunks from a different document
+          final scScope = sc.chunk.sourceDocumentTag;
+          if (bestScope.isNotEmpty && scScope.isNotEmpty && bestScope != scScope) continue;
+          if (_chunkAnswersQuery(correctedQuery.toLowerCase(), sc.chunk)) {
+            final extra = _cleanChunkText(sc.chunk.text);
+            if (!_isRedundant(mergedAnswer, extra)) {
+              mergedAnswer += '\n\n$extra';
+            }
+            break;
+          }
         }
+        final sourcesText = _buildSourcesBlock(result.chunks.map((sc) => sc.chunk).toList());
+        LogService.to.log('[ROUTER] Path A bypass succeeded with best-match chunk → returning answer');
+        yield '$mergedAnswer$sourcesText';
         _emit(QueryStage.done, 'Done');
         return;
       } else {
-        LogService.to.log('[ROUTER] Path A bypass failed relevance check → falling through to LLM');
+        // No chunk directly answers, try heuristic before falling to LLM
+        LogService.to.log('[ROUTER] Path A bypass: no direct match → trying heuristic fallback');
+        final heuristic = _heuristicFallback(result, correctedQuery);
+        if (heuristic != 'This information is not available in the provided documents.') {
+          final sourcesText = _buildSourcesBlock(result.chunks.map((sc) => sc.chunk).toList());
+          LogService.to.log('[ROUTER] Heuristic fallback succeeded → returning answer');
+          yield '$heuristic$sourcesText';
+          _emit(QueryStage.done, 'Done');
+          return;
+        }
+        LogService.to.log('[ROUTER] Path A bypass failed, heuristic also failed → falling through to LLM');
         requiresLlm = true;
       }
     }
@@ -519,6 +586,11 @@ class InferenceRouterService extends GetxService {
   String _heuristicFallback(RagResult ragResult, String correctedQuery) {
     final queryLower = correctedQuery.toLowerCase();
     
+    // ── Resolve document scope from the query so we don't cross-pollinate ──
+    // e.g. 'Working Capital Loan' must NOT return a LAP chunk that mentions
+    // 'working capital requirement' — that's from a different document.
+    final resolvedScope = _retrieval.resolveDocumentScope(queryLower);
+
     // Extract subject words
     const stopWords = {'what', 'is', 'are', 'how', 'does', 'do', 'can',
                        'tell', 'me', 'about', 'explain', 'define', 
@@ -527,17 +599,26 @@ class InferenceRouterService extends GetxService {
         .split(RegExp(r'\W+'))
         .where((w) => w.length > 1 && !stopWords.contains(w))
         .toList();
+
+    // Prefer scoped chunks — fall back to all chunks only if none exist in scope
+    final scopedChunks = resolvedScope != null
+        ? ragResult.chunks
+            .where((sc) => sc.chunk.sourceDocumentTag.contains(resolvedScope))
+            .toList()
+        : ragResult.chunks;
+    final chunksToSearch =
+        scopedChunks.isNotEmpty ? scopedChunks : ragResult.chunks;
     
-    // Step 1: find a chunk that contains ALL subject words
-    for (final chunk in ragResult.chunks) {
+    // Step 1: find a chunk (in scope) that contains ALL subject words
+    for (final chunk in chunksToSearch) {
       final chunkLower = chunk.chunk.text.toLowerCase();
       if (subjectWords.every((w) => chunkLower.contains(w))) {
         return _cleanChunkText(chunk.chunk.text);
       }
     }
     
-    // Step 2: find a chunk containing MOST subject words (60%)
-    for (final chunk in ragResult.chunks) {
+    // Step 2: find a chunk (in scope) containing MOST subject words (60%)
+    for (final chunk in chunksToSearch) {
       final chunkLower = chunk.chunk.text.toLowerCase();
       final matchCount = subjectWords
           .where((w) => chunkLower.contains(w)).length;
@@ -547,11 +628,16 @@ class InferenceRouterService extends GetxService {
       }
     }
     
-    // Step 3: return top chunk text directly (better than "not available"
-    // when we know context exists)
+    // Step 3: return first scoped chunk rather than the top vector-scored chunk
+    // (the top scored chunk might be from a completely different document).
+    if (scopedChunks.isNotEmpty) {
+      LogService.to.log('[HEURISTIC] Falling back to first scoped chunk (scope: $resolvedScope)');
+      return _cleanChunkText(scopedChunks.first.chunk.text);
+    }
+
+    // Step 4: as a last resort return the top-scored chunk if no scope matched
     if (ragResult.chunks.isNotEmpty) {
-      final top = ragResult.chunks.first;
-      return _cleanChunkText(top.chunk.text);
+      return _cleanChunkText(ragResult.chunks.first.chunk.text);
     }
     
     return 'This information is not available in the provided documents.';
