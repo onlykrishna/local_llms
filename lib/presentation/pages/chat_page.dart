@@ -8,6 +8,8 @@ import '../widgets/typing_indicator.dart';
 import '../widgets/backend_status_bar.dart';
 import '../../domain/kb_embedding_service.dart';
 import '../../domain/services/inference_router.dart';
+import '../widgets/benchmark_overlay.dart';
+import 'package:flutter/foundation.dart';
 
 class ChatPage extends GetView<ChatController> {
   const ChatPage({super.key});
@@ -36,7 +38,7 @@ class ChatPage extends GetView<ChatController> {
                   physics: const BouncingScrollPhysics(),
                   itemCount: controller.messages.length +
                       (controller.isGenerating.value ? 1 : 0),
-                  padding: const EdgeInsets.only(bottom: 0, top: 12),
+                  padding: const EdgeInsets.only(bottom: 12, top: 12),
                   itemBuilder: (context, index) {
                     if (index == 0 && controller.isGenerating.value) {
                       if (controller.currentResponseText.value.isEmpty) {
@@ -122,6 +124,9 @@ class ChatPage extends GetView<ChatController> {
           }
           return const SizedBox.shrink();
         }),
+        
+        // Benchmark Overlay (Debug/Profile Only)
+        if (kDebugMode || kProfileMode) const BenchmarkOverlay(),
       ],
     );
   }

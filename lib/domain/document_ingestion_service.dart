@@ -17,6 +17,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'kb_domain.dart';
 import '../objectbox.g.dart';
 import '../core/services/log_service.dart';
+import 'services/topic_guard_service.dart';
 
 class DocumentIngestionService extends GetxService {
   final Store store;
@@ -26,7 +27,7 @@ class DocumentIngestionService extends GetxService {
 
   final RxDouble ingestionProgress = 0.0.obs;
 
-  static const String INGESTION_VERSION = 'v2';
+  static const String INGESTION_VERSION = 'v3';
 
   DocumentIngestionService(this.store, this.embeddingService) {
     docBox = store.box<SourceDocument>();
@@ -202,22 +203,25 @@ class DocumentIngestionService extends GetxService {
         for (int j = 0; j < uniqueBatch.length; j++) {
           final vector = embeddings[j];
 
-          double norm = 0;
-          for (final v in vector) norm += v * v;
-          norm = sqrt(norm);
+          // Explicit assertion for normalization
+          assert(() {
+            double sum = 0.0;
+            for (final v in vector) sum += v * v;
+            final norm = sqrt(sum);
+            assert((norm - 1.0).abs() < 0.01, 'Embedding not normalized: norm=$norm');
+            return true;
+          }());
 
-          if (norm < 0.5 || norm > 1.5) {
-            LogService.to.log('[Ingestion] ⚠️ Bad embedding chunk $i+$j, norm=$norm, skipping');
-            continue;
-          }
-
-          uniqueBatch[j].embedding = vector.map((v) => v.toDouble()).toList();
+          uniqueBatch[j].embedding = vector;
           if (uniqueBatch[j].contentHash != null) {
             existingHashes.add(uniqueBatch[j].contentHash!);
           }
           validChunks.add(uniqueBatch[j]);
 
           if (i + j < 5) {
+            double sum = 0.0;
+            for (final v in vector) sum += v * v;
+            final norm = sqrt(sum);
             LogService.to.log('[Ingestion] ✅ Chunk ${i + j}: norm=${norm.toStringAsFixed(3)} '
                 'hash=${uniqueBatch[j].contentHash?.substring(0, 8)} '
                 'text="${uniqueBatch[j].text.substring(0, min(30, uniqueBatch[j].text.length))}..."');
@@ -237,6 +241,14 @@ class DocumentIngestionService extends GetxService {
       docBox.put(sourceDoc);
       LogService.to.log('[Ingestion] Document ready: $fileName with ${validChunks.length} valid chunks in domain: ${domain.name}');
       ingestionProgress.value = 1.0;
+
+      try {
+        final topicGuard = Get.find<TopicGuardService>();
+        await topicGuard.refresh();
+        LogService.to.log('[Ingestion] Topic guard centroids refreshed');
+      } catch (e) {
+        LogService.to.log('[Ingestion] Could not refresh topic guard: $e');
+      }
 
       return (pageCount: extractionResult.pageCount, chunkCount: validChunks.length);
 

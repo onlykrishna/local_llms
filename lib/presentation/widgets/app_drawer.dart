@@ -216,7 +216,7 @@ class AppDrawer extends StatelessWidget {
 }
 
 class _BackendStatusCard extends StatelessWidget {
-  final InferenceBackend backend;
+  final InferenceBackendType backend;
   const _BackendStatusCard({required this.backend});
 
   @override
@@ -274,27 +274,27 @@ class _BackendStatusCard extends StatelessWidget {
 
   Color get _color {
     switch (backend) {
-      case InferenceBackend.ollama:
+      case InferenceBackendType.ollama:
         return const Color(0xFF5D38BB);
-      case InferenceBackend.onDevice:
+      case InferenceBackendType.onDevice:
         return const Color(0xFFFFB4AB);
     }
   }
 
   String _getLabel(String modelLabel) {
     switch (backend) {
-      case InferenceBackend.ollama:
+      case InferenceBackendType.ollama:
         return 'Ollama LAN';
-      case InferenceBackend.onDevice:
+      case InferenceBackendType.onDevice:
         return modelLabel;
     }
   }
 
-  String _getSubtitle(InferenceBackend backend, String modelPath) {
+  String _getSubtitle(InferenceBackendType backend, String modelPath) {
     switch (backend) {
-      case InferenceBackend.ollama:
+      case InferenceBackendType.ollama:
         return 'Network · Private host';
-      case InferenceBackend.onDevice:
+      case InferenceBackendType.onDevice:
         final isPhi = modelPath.toLowerCase().contains('phi');
         return isPhi ? 'Offline · 3.8B Parameter' : 'Offline · 1.0B Parameter';
     }

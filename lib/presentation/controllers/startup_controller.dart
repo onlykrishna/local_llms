@@ -4,11 +4,15 @@ import 'package:get/get.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:google_fonts/google_fonts.dart';
+import '../../core/benchmark_service.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/services/settings_service.dart';
 import '../../core/services/fallback_dataset_service.dart';
 import '../../domain/services/on_device_inference_service.dart';
+import '../../domain/services/llamadart_backend.dart';
+import '../../domain/services/native_llama_cpp_backend.dart';
+import '../../domain/services/inference_backend.dart';
 import '../../domain/services/inference_router.dart';
 import '../../domain/services/model_download_service.dart';
 import '../../core/embedding_service.dart';
@@ -17,6 +21,7 @@ import '../../domain/rag_retrieval_service.dart';
 import '../../domain/source_citation_service.dart';
 import '../../core/services/bundled_pdf_service.dart';
 import '../../domain/kb_embedding_service.dart';
+import '../../domain/services/topic_guard_service.dart';
 import '../../presentation/controllers/model_manager_controller.dart';
 import '../../presentation/bindings/chat_binding.dart';
 import '../../presentation/pages/chat_page.dart';
@@ -96,6 +101,9 @@ class StartupController extends GetxController {
       ]).timeout(const Duration(seconds: 15));
       log('[STARTUP] ✅ Core services ready', progress: 0.2);
 
+      log('Initializing performance metrics...', progress: 0.25);
+      Get.put(BenchmarkService());
+
       log('Opening vector database...', progress: 0.3);
       final docsDir = await getApplicationDocumentsDirectory();
       final store = await openStore(directory: p.join(docsDir.path, "obx-rag"));
@@ -109,7 +117,13 @@ class StartupController extends GetxController {
       log('[STARTUP] ✅ EmbeddingService ready', progress: 0.6);
       
       log('Configuring AI inference engine...', progress: 0.7);
-      Get.put(OnDeviceInferenceService());
+      const bool useNativeBridge = bool.fromEnvironment('USE_NATIVE_BRIDGE', defaultValue: false);
+      debugPrint('[STARTUP] Inference backend: ${useNativeBridge ? "NativeLlamaCpp" : "LlamaDart"}');
+      
+      Get.put<InferenceBackend>(
+        useNativeBridge ? NativeLlamaCppBackend() : LlamaDartBackend(),
+      );
+      Get.put(OnDeviceInferenceService(Get.find<InferenceBackend>()));
       Get.put(SourceCitationService());
       Get.put(DocumentIngestionService(store, embeddingService));
       Get.put(RagRetrievalService(store, embeddingService));
@@ -123,6 +137,10 @@ class StartupController extends GetxController {
       Get.put(kbService);
       await kbService.initializeKb();
       log('[STARTUP] ✅ KB embedding complete');
+
+      final topicGuard = Get.put(TopicGuardService(store, embeddingService));
+      await topicGuard.init();
+      log('[STARTUP] ✅ Topic guard ready');
 
       await Get.putAsync(() => InferenceRouterService().init());
       Get.lazyPut(() => ModelManagerController());

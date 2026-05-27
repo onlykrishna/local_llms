@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:isolate';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
-import 'package:llamadart/llamadart.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 import '../../core/services/settings_service.dart';
 import '../../core/services/log_service.dart';
+import 'inference_backend.dart';
 import 'inference_isolate.dart';
 
 /// Exception thrown when no model is installed but inference is requested.
@@ -17,68 +17,49 @@ class ModelNotDownloadedException implements Exception {
   String toString() => message;
 }
 
-/// On-device inference via llamadart (llama.cpp GGUF) with Isolate support.
+/// On-device inference service that decouples the UI/Domain from the specific backend.
 class OnDeviceInferenceService extends GetxService {
+  final InferenceBackend _backend;
   final SettingsService _settings = Get.find<SettingsService>();
 
-  Isolate? _isolate;
-  SendPort? _isolateSendPort;
-  ReceivePort? _mainReceivePort;
-  final Completer<void> _isolateReady = Completer<void>();
-
-  bool _isInitialized = false;
+  bool _isShuttingDown = false;
   String? _initializedModelPath;
+  String? _dbPath;
 
   final RxBool isLoading = false.obs;
   final RxBool isModelReady = false.obs;
   final RxString loadingStage = 'Ready'.obs;
 
-  bool get isModelLoaded => _isInitialized;
+  OnDeviceInferenceService(this._backend);
+
+  bool get isModelLoaded => _backend.isReady;
 
   @override
   void onInit() {
     super.onInit();
-    _startIsolate();
+    _initPaths();
     Future.microtask(() => warmup());
   }
 
+  Future<void> _initPaths() async {
+    final docsDir = await getApplicationDocumentsDirectory();
+    _dbPath = p.join(docsDir.path, "obx-rag");
+  }
+
   @override
-  void onClose() {
-    _disposeIsolate();
+  Future<void> onClose() async {
+    if (_isShuttingDown) return;
+    _isShuttingDown = true;
+    
+    LogService.to.log('[Inference] Starting graceful shutdown...');
+    await _backend.dispose();
     super.onClose();
   }
 
-  Future<void> _startIsolate() async {
-    _mainReceivePort = ReceivePort();
-    _isolate = await Isolate.spawn(
-        inferenceIsolateEntryPoint, _mainReceivePort!.sendPort);
-
-    _mainReceivePort!.listen((message) {
-      if (message is SendPort) {
-        _isolateSendPort = message;
-        _isolateReady.complete();
-      }
-    });
-  }
-
-  void _disposeIsolate() {
-    _isolateSendPort
-        ?.send(IsolateRequest('dispose', null, ReceivePort().sendPort));
-    _isolate?.kill(priority: Isolate.immediate);
-    _mainReceivePort?.close();
-  }
-
-  Future<void> _disposeHandles() async {
-    await _isolateReady.future;
-    _isolateSendPort
-        ?.send(IsolateRequest('dispose', null, ReceivePort().sendPort));
-    _isInitialized = false;
+  Future<void> unloadModel() async {
+    await _backend.dispose();
     isModelReady.value = false;
     _initializedModelPath = null;
-  }
-
-  Future<void> unloadModel() async {
-    await _disposeHandles();
   }
 
   Future<bool>? _initFuture;
@@ -92,7 +73,7 @@ class OnDeviceInferenceService extends GetxService {
 
   Future<bool> _ensureInitialized(String modelPath) async {
     if (_initFuture != null) return await _initFuture!;
-    if (_isInitialized && _initializedModelPath == modelPath) return true;
+    if (_backend.isReady && _initializedModelPath == modelPath) return true;
 
     _initFuture = _doInitialize(modelPath);
     try {
@@ -111,47 +92,40 @@ class OnDeviceInferenceService extends GetxService {
 
     isLoading.value = true;
     loadingStage.value = 'Loading model weights...';
-    await _isolateReady.future;
 
     try {
-      final responsePort = ReceivePort();
-      final mParams = ModelParams(
-        gpuLayers: 99, // Enable Metal on iOS for massive speed boost
+      final config = InferenceConfig(
+        gpuLayers: 99,
         contextSize: 2048,
-        numberOfThreads: 6, // Increased for faster processing on modern chips
-        batchSize: 512, // Faster prompt processing
+        numberOfThreads: _optimalThreadCount(),
+        batchSize: 512,
       );
 
-      _isolateSendPort!.send(IsolateRequest('init', {
-        'path': modelPath,
-        'params': mParams,
-      }, responsePort.sendPort));
+      await _backend.loadModel(modelPath, config, dbPath: _dbPath);
 
-      final response = await responsePort.first as IsolateResponse;
-      responsePort.close();
-
-      if (response.isError) {
-        loadingStage.value = 'Error: ${response.data}';
-        return false;
-      }
-
-      _isInitialized = true;
       _initializedModelPath = modelPath;
       isModelReady.value = true;
       loadingStage.value = 'Ready';
       return true;
     } catch (e) {
-      loadingStage.value = 'Error: $e';
+      LogService.to.log('[Inference] Load Error: $e');
+      loadingStage.value = 'Load Failed';
       return false;
     } finally {
       isLoading.value = false;
     }
   }
 
-  /// Stream on-device inference tokens.
-  /// [fullPrompt] is the already-formatted Llama 3 prompt string built by InferenceRouter.
-  Stream<String> respond(
-      String userMessage, String fullPrompt, String domainName) async* {
+  /// Optimized RAG-aware inference stream.
+  Stream<String> respondWithIds(
+    String userMessage,
+    ChunkIdResult chunkIdResult,
+    String domainName,
+  ) async* {
+    if (_isShuttingDown) {
+      yield '⚠️ Service is shutting down...';
+      return;
+    }
     final currentPath = _settings.selectedModel.value;
     if (currentPath.isEmpty) {
       throw ModelNotDownloadedException("No model installed.");
@@ -166,151 +140,64 @@ class OnDeviceInferenceService extends GetxService {
       return;
     }
 
-    // ── Inference parameters tuned to prevent repetition loops ──────────────
-    final gParams = GenerationParams(
-      maxTokens: 200,   // Reduced from 256 for faster response
-      temp: 0.15,       
-      topP: 0.85,
-      topK: 30,
-      penalty: 1.15,     // Slightly reduced for speed
-      stopSequences: [
-        '<|eot_id|>',
-        '<|end_of_text|>',
-        '<|im_end|>',
-        '<|endoftext|>',
-        '###', // Common separator
-      ],
-    );
-
-    LogService.to.log('[LLM] Sending prompt (${fullPrompt.length} chars):\n'
-        '--- PROMPT START ---\n$fullPrompt\n--- PROMPT END ---');
-
-    final responsePort = ReceivePort();
-    _isolateSendPort!.send(IsolateRequest('generate', {
-      'prompt': fullPrompt,
-      'params': gParams,
-    }, responsePort.sendPort));
-
-    String accumulatedRaw = '';
-
-    await for (final response
-        in responsePort.map((r) => r as IsolateResponse)) {
-      if (response.isError) {
-        yield '\n[Local AI Error: ${response.data}]';
-        break;
-      }
-      if (response.isDone) break;
-      if (response.data != null) {
-        accumulatedRaw += response.data as String;
-        yield response.data as String;
-      }
-    }
-    responsePort.close();
+    yield* _backend.generate('', data: {
+      'query': userMessage,
+      'chunkIdResult': chunkIdResult,
+    });
   }
 
-  // ── Response Sanitizer ─────────────────────────────────────────────────────
-  /// Cleans the raw LLM output to remove loops, stop token leakage, and
-  /// duplicate lines. Call this AFTER streaming is complete.
-  static String sanitizeResponse(String raw) {
-    // 1. Strip leading "Based on the provided text," prefix if present
-    raw = raw.replaceFirst(
-        RegExp(r'^Based on the provided (text|context)[,.]?\s*',
-            caseSensitive: false),
-        '');
-
-    // 2. Cut at stop tokens that may have leaked into output
-    for (final stop in [
-      '<|eot_id|>',
-      '<|end_of_text|>',
-      '<|im_end|>',
-      '<|endoftext|>',
-    ]) {
-      final idx = raw.indexOf(stop);
-      if (idx != -1) {
-        LogService.to.log('[SANITIZER] Stop token found at $idx: "$stop" — truncating');
-        raw = raw.substring(0, idx);
-      }
+  /// Stream on-device inference tokens. (Legacy/Fallback)
+  Stream<String> respond(
+      String userMessage, String fullPrompt, String domainName) async* {
+    if (_isShuttingDown) {
+      yield '⚠️ Service is shutting down...';
+      return;
+    }
+    final currentPath = _settings.selectedModel.value;
+    if (currentPath.isEmpty) {
+      throw ModelNotDownloadedException("No model installed.");
     }
 
-    // 3. Deduplicate repeated lines (the most common loop pattern)
-    final lines = raw.split('\n');
-    final seen = <String>{};
-    final deduped = <String>[];
-    for (final line in lines) {
-      final trimmed = line.trim();
-      if (trimmed.isEmpty) {
-        deduped.add(line); // Preserve blank lines
-        continue;
-      }
-      if (!seen.contains(trimmed)) {
-        deduped.add(line);
-        seen.add(trimmed);
-      } else {
-        LogService.to.log('[SANITIZER] Duplicate line removed: "$trimmed"');
-      }
-    }
-    raw = deduped.join('\n');
-
-    // 4. Detect and truncate at the midpoint loop pattern
-    // e.g. "A home loan can be used... A home loan can be used..."
-    final words = raw.trim().split(RegExp(r'\s+'));
-    if (words.length > 40) {
-      final half = words.length ~/ 2;
-      final firstHalf = words.sublist(0, half).join(' ').toLowerCase();
-      final secondHalf = words.sublist(half).join(' ').toLowerCase();
-      // If second half begins with the same 8 words as first half → loop detected
-      final probe = words.sublist(0, 8).join(' ').toLowerCase();
-      if (secondHalf.contains(probe)) {
-        LogService.to.log(
-            '[SANITIZER] ⚠️ Mid-response loop detected — truncating at midpoint');
-        raw = words.sublist(0, half).join(' ');
-      }
+    try {
+      final ok = await _ensureInitialized(currentPath)
+          .timeout(const Duration(seconds: 300));
+      if (!ok) throw Exception("Init failed.");
+    } catch (e) {
+      yield '⚠️ Failed to launch local engine: $e';
+      return;
     }
 
-    // 5. Cap total length to prevent excessively long answers
-    if (raw.length > 1200) {
-      LogService.to.log('[SANITIZER] Response too long (${raw.length}) — capping at 1200 chars');
-      // Find last sentence boundary before cap
-      final cap = raw.substring(0, 1200);
-      final lastPeriod = cap.lastIndexOf(RegExp(r'[.!?]'));
-      raw = lastPeriod > 800 ? cap.substring(0, lastPeriod + 1) : cap;
-    }
+    yield* _backend.generate(fullPrompt);
+  }
 
-    return raw.trim();
+  Future<void> cancelInference() async {
+    await _backend.cancel();
+  }
+
+  int _optimalThreadCount() {
+    if (Platform.isIOS) return 3;
+    if (Platform.isAndroid) return 4;
+    return 4;
   }
 
   Future<String?> validateModelFile(String path) async {
     final file = File(path);
-    if (!file.existsSync()) return 'Model file not found';
+    if (!await file.exists()) return "File not found at $path";
     final size = await file.length();
-    if (size < 50 * 1024 * 1024) return 'File is too small/corrupt.';
+    if (size < 100 * 1024 * 1024) return "File too small to be a valid model";
     return null;
   }
 
-  void cancelInference() {
-    _isolateSendPort
-        ?.send(IsolateRequest('cancel', null, ReceivePort().sendPort));
-  }
-
-  void notifyDomainSwitch() {
-    // Keep warm
+  static String sanitizeResponse(String raw) {
+    return raw
+        .replaceAll(RegExp(r'<\|.*?\|>'), '')
+        .replaceAll(RegExp(r'\(Fact \d+\)'), '')
+        .trim();
   }
 
   Future<void> clearModelCache() async {
-    try {
-      _disposeIsolate();
-      _isInitialized = false;
-      isModelReady.value = false;
-
-      final dir = await getApplicationSupportDirectory();
-      final modelDir = Directory('${dir.path}/models');
-      if (await modelDir.exists()) {
-        await modelDir.delete(recursive: true);
-      }
-
-      await _startIsolate();
-    } catch (e) {
-      LogService.to.log('Error clearing model cache: $e');
-    }
+    await unloadModel();
+    _initializedModelPath = null;
+    isModelReady.value = false;
   }
 }

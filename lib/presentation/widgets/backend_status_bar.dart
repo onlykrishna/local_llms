@@ -24,17 +24,17 @@ class BackendStatusBar extends StatelessWidget {
                 : router.currentBackend.value;
             final isManual = router.isManualMode.value;
 
-            return PopupMenuButton<InferenceBackend>(
+            return PopupMenuButton<InferenceBackendType>(
               padding: EdgeInsets.zero,
               offset: const Offset(0, 30),
               tooltip: 'Choose AI Engine',
-              onSelected: (InferenceBackend b) {
+              onSelected: (InferenceBackendType b) {
                 router.setManualBackend(b);
               },
               itemBuilder: (context) => [
                 _buildMenuItem(context, 'Auto Routing', Icons.auto_mode_rounded, Colors.grey, null, isAuto: true),
-                _buildMenuItem(context, 'Ollama LAN', Icons.lan_rounded, Colors.blue, InferenceBackend.ollama),
-                _buildMenuItem(context, 'On-device AI', Icons.memory_rounded, Colors.orange, InferenceBackend.onDevice),
+                _buildMenuItem(context, 'Ollama LAN', Icons.lan_rounded, Colors.blue, InferenceBackendType.ollama),
+                _buildMenuItem(context, 'On-device AI', Icons.memory_rounded, Colors.orange, InferenceBackendType.onDevice),
               ],
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -88,17 +88,17 @@ class BackendStatusBar extends StatelessWidget {
     );
   }
 
-  PopupMenuItem<InferenceBackend> _buildMenuItem(
+  PopupMenuItem<InferenceBackendType> _buildMenuItem(
     BuildContext context, 
     String label, 
     IconData icon, 
     Color color,
-    InferenceBackend? value,
+    InferenceBackendType? value,
     {bool isAuto = false}
   ) {
     final router = Get.find<InferenceRouterService>();
-    return PopupMenuItem<InferenceBackend>(
-      value: value ?? InferenceBackend.onDevice,
+    return PopupMenuItem<InferenceBackendType>(
+      value: value ?? InferenceBackendType.onDevice,
       onTap: isAuto ? () => router.resetToAuto() : null,
       child: Row(
         children: [
@@ -120,17 +120,17 @@ class BackendStatusBar extends StatelessWidget {
     );
   }
 
-  Color _dotColor(InferenceBackend backend) {
+  Color _dotColor(InferenceBackendType backend) {
     switch (backend) {
-      case InferenceBackend.ollama:   return Colors.blue;
-      case InferenceBackend.onDevice: return Colors.orange;
+      case InferenceBackendType.ollama:   return Colors.blue;
+      case InferenceBackendType.onDevice: return Colors.orange;
     }
   }
 
-  String _backendLabel(InferenceBackend backend, String currentLocalModel) {
+  String _backendLabel(InferenceBackendType backend, String currentLocalModel) {
     switch (backend) {
-      case InferenceBackend.ollama:   return 'Ollama LAN';
-      case InferenceBackend.onDevice: return currentLocalModel;
+      case InferenceBackendType.ollama:   return 'Ollama LAN';
+      case InferenceBackendType.onDevice: return currentLocalModel;
     }
   }
 }

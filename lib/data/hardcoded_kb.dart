@@ -17,7 +17,7 @@ class KbEntry {
   String get embeddingText => '$question\n$answer\nKeywords: ${keywords.join(', ')}';
 }
 
-const String kKbVersion = 'v1.4';
+const String kKbVersion = 'v1.5';
 
 const List<KbEntry> kKnowledgeBase = [
 

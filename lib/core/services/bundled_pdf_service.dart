@@ -15,6 +15,7 @@ import '../../domain/document_ingestion_service.dart';
 import '../../domain/kb_domain.dart';
 import '../../objectbox.g.dart';
 import '../services/log_service.dart';
+import '../../domain/services/topic_guard_service.dart';
 
 class BundledPdfService extends GetxService {
   static const List<String> _bundledPdfAssets = [
@@ -122,6 +123,14 @@ class BundledPdfService extends GetxService {
     chunkBox.putMany(newChunks);
     LogService.to.log('[BUNDLED] Saved ${newChunks.length} new chunks');
     
+    try {
+      final topicGuard = Get.find<TopicGuardService>();
+      await topicGuard.refresh();
+      LogService.to.log('[BUNDLED] Topic guard centroids refreshed');
+    } catch (e) {
+      LogService.to.log('[BUNDLED] Could not refresh topic guard: $e');
+    }
+
     await _settingsBox.put('kb_version', AppConstants.kbVersion);
     LogService.to.log('[BUNDLED] Version updated to ${AppConstants.kbVersion}');
   }
