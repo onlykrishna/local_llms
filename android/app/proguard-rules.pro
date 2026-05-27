@@ -23,7 +23,3 @@
 -keepattributes Signature
 -keepattributes *Annotation*
 -dontwarn sun.misc.**
-
-# Google Play Core (deferred components references in Flutter core)
--dontwarn com.google.android.play.core.**
-
