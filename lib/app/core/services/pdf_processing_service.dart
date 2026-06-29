@@ -2,9 +2,25 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'storage_service.dart';
+
+// Top-level function required for compute()
+List<MapEntry<int, String>> _extractPagesIsolate(String filePath) {
+  final document = PdfDocument(inputBytes: File(filePath).readAsBytesSync());
+  final extractor = PdfTextExtractor(document);
+  final results = <MapEntry<int, String>>[];
+  for (int i = 0; i < document.pages.count; i++) {
+    final text = extractor.extractText(startPageIndex: i, endPageIndex: i);
+    if (text.trim().isNotEmpty) {
+      results.add(MapEntry(i + 1, text));
+    }
+  }
+  document.dispose();
+  return results;
+}
 
 class PdfProcessingService extends GetxService {
 
@@ -55,6 +71,10 @@ class PdfProcessingService extends GetxService {
 
     document.dispose();
     return pages;
+  }
+
+  Future<List<MapEntry<int, String>>> extractPagesAsync(String filePath) {
+    return compute(_extractPagesIsolate, filePath);
   }
 
   // ── Split page text into overlapping chunks ──

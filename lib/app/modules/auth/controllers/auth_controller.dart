@@ -7,8 +7,10 @@ import '../../../../app/core/services/storage_service.dart';
 import '../../../../app/routes/app_pages.dart';
 
 class AuthController extends GetxController {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseAuth _auth;
   final StorageService _storage = Get.find<StorageService>();
+
+  AuthController({FirebaseAuth? auth}) : _auth = auth ?? FirebaseAuth.instance;
 
   @override
   void onInit() {

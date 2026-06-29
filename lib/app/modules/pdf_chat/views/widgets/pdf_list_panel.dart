@@ -51,7 +51,7 @@ class PdfListPanel extends GetView<PdfChatController> {
                     Icon(
                       Icons.folder_open_outlined,
                       size: 48,
-                      color: colorScheme.onSurfaceVariant.withOpacity(0.5),
+                      color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
                     ),
                     const SizedBox(height: 16),
                     const Text('No PDFs uploaded yet'),
@@ -77,7 +77,7 @@ class PdfListPanel extends GetView<PdfChatController> {
                     Icons.picture_as_pdf_outlined,
                     color: isSelected
                         ? colorScheme.error
-                        : colorScheme.onSurfaceVariant.withOpacity(0.5),
+                        : colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
                   ),
                   title: Text(
                     doc.fileName,
@@ -127,7 +127,7 @@ class PdfListPanel extends GetView<PdfChatController> {
                     ],
                   ),
                   tileColor: isSelected
-                      ? colorScheme.primaryContainer.withOpacity(0.3)
+                      ? colorScheme.primaryContainer.withValues(alpha: 0.3)
                       : null,
                   onTap: () => controller.toggleDocSelection(doc.id),
                 );

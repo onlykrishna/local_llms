@@ -1,73 +1,254 @@
+import 'dart:async';
 import 'dart:convert';
-import 'package:crypto/crypto.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/ai_provider.dart';
 import '../models/chat_message.dart';
 import 'analytics_service.dart';
+import 'local_llm_service.dart';
 
+/// Central service that manages the active AI provider, API key storage/retrieval,
+/// and message routing to the correct backend (OpenAI, Groq, Gemini, or on-device llama.cpp).
 class ApiProviderService extends GetxService {
+  static const _secureStorage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
 
-  // Active provider — reactive so UI can observe it
+  // ── Reactive state ──────────────────────────────────────
   final Rx<AiProvider> activeProvider = AiProvider.groq.obs;
 
-  // In-memory cache — keyed by SHA-256(provider + message history)
+  /// Reactive key observers for settings UI binding.
+  final RxString openAiKey = ''.obs;
+  final RxString groqKey = ''.obs;
+  final RxString geminiKey = ''.obs;
+
+  /// In-memory key cache mapping provider name to api key.
+  final RxMap<String, String> _cachedKeys = <String, String>{}.obs;
+
+  // ── Response cache ──────────────────────────────────────
   final Map<String, String> _cache = {};
 
-  // Read API keys from .env at runtime
-  String get _openAiKey => dotenv.env['OPENAI_API_KEY'] ?? '';
-  String get _groqKey   => dotenv.env['GROQ_API_KEY'] ?? '';
+  // ── Lifecycle ───────────────────────────────────────────
 
   @override
   void onInit() {
     super.onInit();
-    if (_openAiKey.isNotEmpty && _openAiKey.startsWith('sk-')) {
+    _loadKeysAndInit();
+  }
+
+  /// Loads keys from secure storage (falling back to .env), then selects the
+  /// best available provider. Called on service init and after key save/delete.
+  Future<void> _loadKeysAndInit() async {
+    await _refreshKeysFromAllSources();
+    _selectDefaultProvider();
+  }
+
+  /// Reads keys from secure storage first, falls back to .env.
+  Future<void> _refreshKeysFromAllSources() async {
+    try {
+      final secureOpenAi = await _secureStorage.read(key: 'OPENAI_API_KEY');
+      final secureGroq = await _secureStorage.read(key: 'GROQ_API_KEY');
+      final secureGemini = await _secureStorage.read(key: 'GEMINI_API_KEY');
+
+      _cachedKeys['openai'] = (secureOpenAi?.isNotEmpty == true)
+          ? secureOpenAi!
+          : (dotenv.env['OPENAI_API_KEY'] ?? '');
+      _cachedKeys['groq'] = (secureGroq?.isNotEmpty == true)
+          ? secureGroq!
+          : (dotenv.env['GROQ_API_KEY'] ?? '');
+      _cachedKeys['gemini'] = (secureGemini?.isNotEmpty == true)
+          ? secureGemini!
+          : (dotenv.env['GEMINI_API_KEY'] ?? '');
+    } catch (e) {
+      _cachedKeys['openai'] = dotenv.env['OPENAI_API_KEY'] ?? '';
+      _cachedKeys['groq'] = dotenv.env['GROQ_API_KEY'] ?? '';
+      _cachedKeys['gemini'] = dotenv.env['GEMINI_API_KEY'] ?? '';
+    }
+
+    // Sync reactive variables
+    openAiKey.value = _cachedKeys['openai'] ?? '';
+    groqKey.value = _cachedKeys['groq'] ?? '';
+    geminiKey.value = _cachedKeys['gemini'] ?? '';
+  }
+
+  /// Picks the default provider based on available keys.
+  void _selectDefaultProvider() {
+    if (openAiKey.value.isNotEmpty && openAiKey.value.startsWith('sk-')) {
       activeProvider.value = AiProvider.openai;
-    } else if (_groqKey.isNotEmpty) {
+    } else if (groqKey.value.isNotEmpty) {
       activeProvider.value = AiProvider.groq;
+    } else if (geminiKey.value.isNotEmpty) {
+      activeProvider.value = AiProvider.gemini;
+    } else {
+      activeProvider.value = AiProvider.groq; // Default fallback
     }
   }
 
+  // ── Key management ──────────────────────────────────────
+
+  /// Public reload — called after [saveKey] / [deleteKey] and from tests.
+  Future<void> loadKeys() => _refreshKeysFromAllSources();
+
+  /// Saves [key] to secure storage for [provider], then refreshes in-memory cache.
+  Future<void> saveKey(AiProvider provider, String key) async {
+    final storageKey = provider == AiProvider.openai
+        ? 'OPENAI_API_KEY'
+        : provider == AiProvider.groq
+            ? 'GROQ_API_KEY'
+            : 'GEMINI_API_KEY';
+    await _secureStorage.write(key: storageKey, value: key.trim());
+    await _refreshKeysFromAllSources();
+  }
+
+  /// Deletes the stored key for [provider] from secure storage.
+  Future<void> deleteKey(AiProvider provider) async {
+    final storageKey = provider == AiProvider.openai
+        ? 'OPENAI_API_KEY'
+        : provider == AiProvider.groq
+            ? 'GROQ_API_KEY'
+            : 'GEMINI_API_KEY';
+    await _secureStorage.delete(key: storageKey);
+    await _refreshKeysFromAllSources();
+  }
+
+  // ── Provider readiness checks ───────────────────────────
+
+  /// Synchronous readiness check using cached reactive key values.
+  bool get isReady {
+    switch (activeProvider.value) {
+      case AiProvider.offline:
+        try {
+          return Get.find<LocalLlmService>().isModelReady.value;
+        } catch (_) {
+          return false;
+        }
+      case AiProvider.groq:
+      case AiProvider.gemini:
+      case AiProvider.openai:
+        final k = _sanitizeKey(
+          _cachedKeys[activeProvider.value.name] ??
+          dotenv.env[activeProvider.value.envKeyName]
+        );
+        return k.isNotEmpty;
+    }
+  }
+
+  /// Human-readable reason why [isReady] returned false for the current provider.
+  String? get readinessError {
+    if (isReady) return null;
+    if (activeProvider.value == AiProvider.offline) {
+      return 'Offline model not downloaded. Go to Settings → AI Engine.';
+    }
+    return '${activeProvider.value.displayName} API key not configured. '
+           'Add it in Settings → AI Engine.';
+  }
+
+  // ── Provider switching ──────────────────────────────────
+
   void switchProvider(AiProvider provider) {
+    final previous = activeProvider.value;
     activeProvider.value = provider;
-    // Analytics
+
     try {
       Get.find<AnalyticsService>().logProviderSwitched(provider.displayName);
     } catch (_) {}
+
+    // Unload offline model from RAM when switching away to free memory
+    if (previous == AiProvider.offline && provider != AiProvider.offline) {
+      try {
+        Get.find<LocalLlmService>().unloadModel();
+      } catch (_) {}
+    }
   }
+
+  // ── Cache ───────────────────────────────────────────────
 
   void clearCache() => _cache.clear();
 
-  String _cacheKey(List<ChatMessage> messages) {
-    final content = messages
-        .map((m) => '${m.role.name}:${m.content}')
-        .join('|');
-    return sha256.convert(utf8.encode(content)).toString();
+
+  // ── Message routing ─────────────────────────────────────
+
+  String _sanitizeKey(String? raw) {
+    if (raw == null) return '';
+    return raw.trim().replaceAll('\r', '').replaceAll('"', '').replaceAll("'", '');
   }
 
-  /// Send a list of messages and return the assistant reply string.
-  /// Throws an Exception with a user-friendly message on failure.
-  Future<String> sendMessages(List<ChatMessage> messages) async {
-    final key = _cacheKey(messages);
-    if (_cache.containsKey(key)) return _cache[key]!;
-
+  Future<String> sendMessages(
+    List<ChatMessage> messages, {
+    bool voiceMode = false,
+  }) async {
     final provider = activeProvider.value;
-    final apiKey = provider == AiProvider.openai ? _openAiKey : _groqKey;
 
+    final apiMessages = List<ChatMessage>.from(messages);
+    if (voiceMode) {
+      apiMessages.insert(0, ChatMessage(
+        id: 'voice-instruction',
+        role: MessageRole.system,
+        content: 'You are responding to a voice query. '
+                 'Keep your answer to 2-3 short sentences. '
+                 'Use plain conversational language. '
+                 'No bullet points, no headers, no markdown formatting.',
+        timestamp: DateTime.now(),
+      ));
+    } else {
+      final hasSystem = apiMessages.any((m) => m.role == MessageRole.system);
+      if (!hasSystem) {
+        apiMessages.insert(0, ChatMessage(
+          id: 'system',
+          role: MessageRole.system,
+          content: 'You are a helpful, concise, and friendly AI assistant. '
+                   'Format responses in Markdown.',
+          timestamp: DateTime.now(),
+        ));
+      }
+    }
+
+    // ── OFFLINE ──────────────────────────────────────────────────────────────
+    if (provider == AiProvider.offline) {
+      final localLlm = Get.find<LocalLlmService>();
+      if (!localLlm.isModelReady.value) {
+        throw Exception(
+          'Offline model not downloaded. Go to Settings → AI Engine.');
+      }
+      return localLlm.generate(messages: apiMessages);
+    }
+
+    // ── CLOUD PROVIDERS ───────────────────────────────────────────────────────
+    final apiKey = _sanitizeKey(
+      _cachedKeys[provider.name] ?? dotenv.env[provider.envKeyName]
+    );
     if (apiKey.isEmpty) {
       throw Exception(
         '${provider.displayName} API key is not configured. '
-        'Add it to your .env file.'
-      );
+        'Add it in Settings → AI Engine.');
     }
 
-    final payload = {
-      'model': provider.modelId,
+    final hasImage = apiMessages.any(
+      (m) => m.imageBase64 != null && m.imageBase64!.isNotEmpty);
+    final modelId = provider.modelIdForRequest(hasImage: hasImage);
+
+    // ── GEMINI ────────────────────────────────────────────────────────────────
+    if (provider == AiProvider.gemini) {
+      return _sendGemini(apiMessages, modelId, apiKey, hasImage);
+    }
+
+    // ── GROQ / OPENAI (OpenAI-compatible format) ──────────────────────────────
+    return _sendOpenAiCompatible(apiMessages, modelId, apiKey, provider);
+  }
+
+  Future<String> _sendOpenAiCompatible(
+    List<ChatMessage> messages,
+    String modelId,
+    String apiKey,
+    AiProvider provider,
+  ) async {
+    final body = jsonEncode({
+      'model': modelId,
       'messages': messages.map((m) => m.toApiMap()).toList(),
       'max_tokens': 1024,
-      'temperature': 0.7,
-    };
+    });
 
     final response = await http.post(
       Uri.parse(provider.endpoint),
@@ -75,25 +256,75 @@ class ApiProviderService extends GetxService {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $apiKey',
       },
-      body: jsonEncode(payload),
-    ).timeout(const Duration(seconds: 30));
+      body: body,
+    ).timeout(
+      const Duration(seconds: 120),
+      onTimeout: () => throw TimeoutException(
+        'The request timed out after 2 minutes. '
+        'The API may be under load — please try again.',
+      ),
+    );
 
     if (response.statusCode == 200) {
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final choices = data['choices'] as List<dynamic>;
-      if (choices.isEmpty) throw Exception('Empty response from AI.');
-      final message = choices[0]['message'] as Map<String, dynamic>;
-      final reply = (message['content'] as String).trim();
-      _cache[key] = reply;
-      return reply;
-    } else if (response.statusCode == 401) {
-      throw Exception('Invalid API key for ${provider.displayName}.');
-    } else if (response.statusCode == 429) {
-      throw Exception('Rate limit reached. Please wait and try again.');
-    } else {
-      final body = jsonDecode(response.body);
-      final errorMsg = body['error']?['message'] ?? 'Unknown error';
-      throw Exception('${provider.displayName} error: $errorMsg');
+      final data = jsonDecode(response.body);
+      return data['choices'][0]['message']['content'] as String;
     }
+    final err = jsonDecode(response.body);
+    throw Exception(
+      '${provider.displayName} error: ${err['error']?['message'] ?? response.body}');
+  }
+
+  Future<String> _sendGemini(
+    List<ChatMessage> messages,
+    String modelId,
+    String apiKey,
+    bool hasImage,
+  ) async {
+    // Convert messages to Gemini format
+    final contents = <Map<String, dynamic>>[];
+    String? systemInstruction;
+
+    for (final msg in messages) {
+      if (msg.role == MessageRole.system) {
+        // Gemini uses systemInstruction, not a system role message
+        systemInstruction = msg.content;
+        continue;
+      }
+      contents.add(msg.toApiMap(useGeminiFormat: true));
+    }
+
+    final requestBody = <String, dynamic>{
+      'contents': contents,
+      if (systemInstruction != null)
+        'systemInstruction': {
+          'parts': [{'text': systemInstruction}]
+        },
+      'generationConfig': {
+        'maxOutputTokens': 1024,
+        'temperature': 0.7,
+      },
+    };
+
+    final uri = Uri.parse(
+      '${AiProvider.gemini.endpoint}/$modelId:generateContent?key=$apiKey');
+
+    final response = await http.post(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(requestBody),
+    ).timeout(
+      const Duration(seconds: 120),
+      onTimeout: () => throw TimeoutException(
+        'Gemini request timed out after 2 minutes. Please try again.',
+      ),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['candidates'][0]['content']['parts'][0]['text'] as String;
+    }
+    final err = jsonDecode(response.body);
+    throw Exception(
+      'Gemini error: ${err['error']?['message'] ?? response.body}');
   }
 }

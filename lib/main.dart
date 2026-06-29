@@ -15,9 +15,12 @@ import 'app/core/services/api_provider_service.dart';
 import 'app/core/services/chat_history_service.dart';
 import 'app/core/services/connectivity_service.dart';
 import 'app/core/services/embedding_service.dart';
+import 'app/core/services/local_llm_service.dart';
 import 'app/core/services/pdf_chat_service.dart';
 import 'app/core/services/pdf_processing_service.dart';
 import 'app/core/services/storage_service.dart';
+import 'app/core/services/voice_service.dart';
+import 'app/core/services/google_tts_service.dart';
 import 'app/core/theme/app_theme.dart';
 import 'app/core/theme/theme_controller.dart';
 import 'app/routes/app_pages.dart';
@@ -43,14 +46,17 @@ void main() async {
 
   // 5. App Check
   try {
-    await FirebaseAppCheck.instance.activate(
-      androidProvider: kDebugMode 
-          ? AndroidProvider.debug 
-          : AndroidProvider.playIntegrity,
-      appleProvider: kDebugMode 
-          ? AppleProvider.debug 
-          : AppleProvider.appAttest,
-    );
+    if (kDebugMode) {
+      await FirebaseAppCheck.instance.activate(
+        appleProvider: AppleProvider.debug,
+        androidProvider: AndroidProvider.debug,
+      );
+    } else {
+      await FirebaseAppCheck.instance.activate(
+        appleProvider: AppleProvider.deviceCheck, // iOS production
+        androidProvider: AndroidProvider.playIntegrity, // Android production
+      );
+    }
   } catch (e, stack) {
     debugPrint("Firebase App Check activation failed: $e");
     FirebaseCrashlytics.instance.recordError(e, stack, reason: 'App Check activation failed');
@@ -74,6 +80,11 @@ void main() async {
   }
   Get.put(ThemeController());
   Get.put(ConnectivityService());
+  // LocalLlmService — no network deps, depends only on StorageService (for file paths)
+  Get.put(LocalLlmService());
+  // VoiceService — no deps beyond platform mic APIs
+  Get.put(VoiceService());
+  Get.put(GoogleTtsService());
   Get.put(ApiProviderService());
   Get.put(ChatHistoryService());
   Get.put(PdfProcessingService());

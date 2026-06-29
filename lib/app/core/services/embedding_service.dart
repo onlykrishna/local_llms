@@ -2,17 +2,52 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
+import 'api_provider_service.dart';
 
 class EmbeddingService extends GetxService {
+  static const _secureStorage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
 
-  // ── Provider detection ──
+  // ── Reactive HF key (secure storage → .env fallback) —
+  final RxString hfKey = ''.obs;
+
+  @override
+  void onInit() {
+    super.onInit();
+    _loadHfKey();
+  }
+
+  Future<void> _loadHfKey() async {
+    try {
+      final secure = await _secureStorage.read(key: 'HF_API_KEY');
+      hfKey.value = (secure?.isNotEmpty == true)
+          ? secure!
+          : (dotenv.env['HF_API_KEY'] ?? '');
+    } catch (_) {
+      hfKey.value = dotenv.env['HF_API_KEY'] ?? '';
+    }
+  }
+
+  Future<void> saveHfKey(String key) async {
+    await _secureStorage.write(key: 'HF_API_KEY', value: key.trim());
+    await _loadHfKey();
+  }
+
+  Future<void> deleteHfKey() async {
+    await _secureStorage.delete(key: 'HF_API_KEY');
+    await _loadHfKey();
+  }
+
+  // ── Provider detection —
   // Priority: OpenAI if key present → HuggingFace otherwise
-  // TO SWITCH TO OPENAI: just add OPENAI_API_KEY=sk-... to .env
-  // No code change needed ever.
-  String get _openAiKey => dotenv.env['OPENAI_API_KEY'] ?? '';
-  String get _hfKey     => dotenv.env['HF_API_KEY'] ?? '';
+  // TO SWITCH TO OPENAI: just add OPENAI_API_KEY=sk-... to .env or Settings UI
+  String get _openAiKey => Get.find<ApiProviderService>().openAiKey.value;
+  String get _hfKey     => hfKey.value;
+
 
   bool get isOpenAiActive =>
       _openAiKey.isNotEmpty && _openAiKey.startsWith('sk-');
@@ -231,7 +266,7 @@ class EmbeddingService extends GetxService {
               .map((e) => (e as num).toDouble())
               .toList();
         }
-        return (data as List<dynamic>)
+        return data
             .map((e) => (e as num).toDouble())
             .toList();
       }

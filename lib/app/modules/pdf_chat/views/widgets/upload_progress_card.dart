@@ -53,7 +53,7 @@ class UploadProgressCard extends StatelessWidget {
                 Text(
                   '${(progress * 100).toInt()}%',
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant.withOpacity(0.7),
+                    color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
                     fontSize: 12,
                   ),
                 ),

@@ -1,3 +1,5 @@
+// ignore_for_file: constant_identifier_names
+
 part of 'app_pages.dart';
 
 abstract class AppRoutes {
@@ -9,4 +11,5 @@ abstract class AppRoutes {
   static const ONBOARDING = '/onboarding';
   static const SETTINGS = '/settings';
   static const SETUP = '/setup';
+  static const LIVE_VOICE = '/live-voice';
 }

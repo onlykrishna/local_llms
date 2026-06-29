@@ -25,7 +25,7 @@ class PdfEmptyState extends GetView<PdfChatController> {
             Icon(
               Icons.auto_stories_outlined,
               size: 72,
-              color: colorScheme.onSurfaceVariant.withOpacity(0.5),
+              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 16),
             Text(

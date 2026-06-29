@@ -24,7 +24,7 @@ class CitationCard extends StatelessWidget {
               'SOURCES',
               style: theme.textTheme.labelSmall?.copyWith(
                 fontSize: 11,
-                color: colorScheme.onSurfaceVariant.withOpacity(0.7),
+                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
                 fontWeight: FontWeight.bold,
                 letterSpacing: 0.5,
               ),
@@ -35,9 +35,9 @@ class CitationCard extends StatelessWidget {
               margin: const EdgeInsets.only(bottom: 4.0),
               padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
               decoration: BoxDecoration(
-                color: colorScheme.surfaceVariant.withOpacity(0.5),
+                color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
                 border: Border.all(
-                  color: colorScheme.outlineVariant.withOpacity(0.5),
+                  color: colorScheme.outlineVariant.withValues(alpha: 0.5),
                 ),
                 borderRadius: BorderRadius.circular(6.0),
               ),
@@ -63,7 +63,7 @@ class CitationCard extends StatelessWidget {
                   Text(
                     '${(citation.score * 100).toStringAsFixed(0)}% match',
                     style: theme.textTheme.labelSmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant.withOpacity(0.6),
+                      color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
                     ),
                   ),
                 ],

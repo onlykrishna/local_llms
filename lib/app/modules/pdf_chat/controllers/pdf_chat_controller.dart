@@ -294,9 +294,15 @@ class PdfChatController extends GetxController {
   }
 
   // ── Send a question to the RAG pipeline ──
-  Future<void> sendQuestion(String question) async {
+  Future<void> sendQuestion(String question, {String? attachmentPath, bool voiceMode = false}) async {
     final trimmed = question.trim();
     if (trimmed.isEmpty || isThinking.value) return;
+
+    if (attachmentPath != null && attachmentPath.isNotEmpty) {
+      try {
+        Get.find<AnalyticsService>().logAttachmentUsed('image_sent');
+      } catch (_) {}
+    }
 
     messages.add(PdfChatMessage(
       id: const Uuid().v4(),
@@ -316,6 +322,7 @@ class PdfChatController extends GetxController {
       final answer = await _service.generateAnswer(
         question: trimmed,
         chunks: chunks,
+        voiceMode: voiceMode,
       );
 
       messages.add(PdfChatMessage(

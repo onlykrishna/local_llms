@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -100,7 +101,7 @@ class ChatBubble extends StatelessWidget {
           decoration: BoxDecoration(
             gradient: isUser && !isError ? kGradient : null,
             color: isError
-                ? kError.withOpacity(0.08)
+                ? kError.withValues(alpha: 0.08)
                 : isUser
                     ? null
                     : kCard,
@@ -113,7 +114,7 @@ class ChatBubble extends StatelessWidget {
             border: isUser ? null : Border.all(color: kBorder),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.02),
+                color: Colors.black.withValues(alpha: 0.02),
                 blurRadius: 8,
                 offset: const Offset(0, 2),
               )
@@ -142,7 +143,61 @@ class ChatBubble extends StatelessWidget {
                     ),
                   ],
                 )
-              else if (isUser)
+              else if (isUser) ...[
+                if (message.imageBase64 != null && message.imageBase64!.isNotEmpty) ...[
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.memory(
+                      base64Decode(message.imageBase64!),
+                      width: 200,
+                      height: 150,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => Container(
+                        width: 200,
+                        height: 60,
+                        color: Colors.grey.withValues(alpha: 0.2),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.image, size: 20),
+                            SizedBox(width: 6),
+                            Text('Image', style: TextStyle(fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                ],
+                if (message.attachedFileName != null) ...[
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.25),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.picture_as_pdf,
+                            color: Colors.white, size: 14),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            message.attachedFileName!,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 SelectableText(
                   message.content,
                   style: const TextStyle(
@@ -150,7 +205,8 @@ class ChatBubble extends StatelessWidget {
                     fontSize: 15,
                     height: 1.4,
                   ),
-                )
+                ),
+              ]
               else
                 MarkdownBody(
                   data: message.content,
@@ -183,7 +239,7 @@ class ChatBubble extends StatelessWidget {
                     DateFormat('hh:mm a').format(message.timestamp),
                     style: TextStyle(
                       color: isUser && !isError
-                          ? Colors.white.withOpacity(0.7)
+                          ? Colors.white.withValues(alpha: 0.7)
                           : kText3,
                       fontSize: 10,
                     ),

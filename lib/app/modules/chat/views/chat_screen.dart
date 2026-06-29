@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:collection/collection.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../controllers/chat_controller.dart';
 import 'widgets/chat_bubble.dart';
 import 'widgets/typing_indicator.dart';
 import 'widgets/message_input_bar.dart';
 import 'package:flutter_ai_chat_app/app/core/models/ai_provider.dart';
+import 'package:flutter_ai_chat_app/app/core/models/chat_message.dart';
 import 'package:flutter_ai_chat_app/app/core/services/api_provider_service.dart';
 import 'package:flutter_ai_chat_app/app/core/services/storage_service.dart';
 import 'package:flutter_ai_chat_app/app/routes/app_pages.dart';
@@ -110,7 +112,7 @@ class ChatScreen extends GetView<ChatController> {
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                     margin: const EdgeInsets.only(bottom: 10),
                     decoration: BoxDecoration(
-                      color: isSelected ? kPrimary.withOpacity(0.06) : Colors.transparent,
+                      color: isSelected ? kPrimary.withValues(alpha: 0.06) : Colors.transparent,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: isSelected ? kPrimary : kBorder,
@@ -162,7 +164,7 @@ class ChatScreen extends GetView<ChatController> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                     decoration: BoxDecoration(
-                      color: isSelected ? kPrimary.withOpacity(0.06) : Colors.transparent,
+                      color: isSelected ? kPrimary.withValues(alpha: 0.06) : Colors.transparent,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: isSelected ? kPrimary : kBorder,
@@ -263,7 +265,7 @@ class ChatScreen extends GetView<ChatController> {
               'Active: ${controller.activeProviderName}',
               style: TextStyle(
                 fontSize: 11,
-                color: Colors.white.withOpacity(0.85),
+                color: Colors.white.withValues(alpha: 0.85),
                 fontWeight: FontWeight.w500,
               ),
             )),
@@ -306,7 +308,7 @@ class ChatScreen extends GetView<ChatController> {
                     width: 52,
                     height: 52,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.18),
+                      color: Colors.white.withValues(alpha: 0.18),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
@@ -443,7 +445,7 @@ class ChatScreen extends GetView<ChatController> {
                           width: 72,
                           height: 72,
                           decoration: BoxDecoration(
-                            color: kPrimary.withOpacity(0.08),
+                            color: kPrimary.withValues(alpha: 0.08),
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(
@@ -496,10 +498,23 @@ class ChatScreen extends GetView<ChatController> {
             }),
           ),
 
-          // Message input bar
           MessageInputBar(
+            chatController: controller,
             isTyping: controller.isTyping,
-            onSend: (text) => controller.sendMessage(text),
+            onSend: (text, {attachmentPath}) =>
+                controller.sendMessage(text),
+            onAttach: (filePath, type) {
+              controller.setAttachment(filePath, type);
+            },
+            onVoiceSend: (text) async {
+              // Send via ChatController and return the assistant reply string
+              // so LiveVoiceController can speak it without reading messages.last
+              await controller.sendMessage(text, voiceMode: true);
+              final lastNonError = controller.messages.reversed
+                  .firstWhereOrNull((m) =>
+                      m.role == MessageRole.assistant && !m.isError);
+              return lastNonError?.content ?? '';
+            },
           ),
         ],
       ),

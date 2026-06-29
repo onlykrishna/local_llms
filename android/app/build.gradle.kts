@@ -41,12 +41,13 @@ android {
 
     defaultConfig {
         applicationId = "com.aeologic.adhoc.aiapp"
-        minSdk = flutter.minSdkVersion
+        minSdk = flutter.minSdkVersion  // fllama requires API 23+ for llama.cpp native inference
         targetSdk = flutter.targetSdkVersion
         versionCode = 1
         versionName = "1.0.0"
         multiDexEnabled = true
     }
+
 
     buildTypes {
         release {

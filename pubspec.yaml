@@ -54,6 +54,19 @@ dependencies:
   flutter_animate: ^4.5.0
   google_fonts: ^6.2.1
 
+  # Phase 5 - Voice + Attachments + Offline LLM
+  speech_to_text: ^7.0.0          # on-device STT (Android SpeechRecognizer / iOS Speech)
+  flutter_tts: ^4.2.0             # on-device TTS for offline voice mode
+  just_audio: ^0.9.40             # for MP3 playback of Google Cloud TTS
+
+  permission_handler: ^11.3.1     # mic + camera + storage permissions
+  image_picker: ^1.1.2            # camera + photo library for attachment menu
+  dio: ^5.7.0                     # streamed GGUF model download with progress
+  path_provider: ^2.1.4           # app support directory for GGUF model storage
+  flutter_secure_storage: ^9.2.2  # secure storage for user-entered API keys
+  fllama: ^0.0.1                  # Flutter binding for llama.cpp — on-device GGUF inference
+  collection: ^1.19.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

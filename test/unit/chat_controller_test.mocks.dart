@@ -106,13 +106,16 @@ class MockApiProviderService extends _i1.Mock
   );
 
   @override
-  _i5.Future<String> sendMessages(List<_i6.ChatMessage>? messages) =>
+  _i5.Future<String> sendMessages(
+    List<_i6.ChatMessage>? messages, {
+    bool? voiceMode = false,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#sendMessages, [messages]),
+            Invocation.method(#sendMessages, [messages], {#voiceMode: voiceMode}),
             returnValue: _i5.Future<String>.value(
               _i7.dummyValue<String>(
                 this,
-                Invocation.method(#sendMessages, [messages]),
+                Invocation.method(#sendMessages, [messages], {#voiceMode: voiceMode}),
               ),
             ),
           )

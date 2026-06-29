@@ -28,4 +28,24 @@ class AnalyticsService extends GetxService {
       parameters: {'to': to},
     );
   }
+
+  /// [type] — 'camera' | 'photos' | 'files'
+  Future<void> logAttachmentUsed(String type) async {
+    await _analytics.logEvent(
+      name: 'attachment_used',
+      parameters: {'type': type},
+    );
+  }
+
+  /// [mode] — 'stt' (short-tap mic) | 'live' (long-press / live voice screen)
+  Future<void> logVoiceInputUsed(String mode) async {
+    await _analytics.logEvent(
+      name: 'voice_input_used',
+      parameters: {'mode': mode},
+    );
+  }
+
+  Future<void> logOfflineModelDownloaded() async {
+    await _analytics.logEvent(name: 'offline_model_downloaded');
+  }
 }

@@ -14,7 +14,13 @@
 			</dict>
 		</array>
 		<key>NSPhotoLibraryUsageDescription</key>
-		<string>Required to pick PDF files from your library.</string>
+		<string>Required to pick images and PDF files from your library.</string>
+		<key>NSMicrophoneUsageDescription</key>
+		<string>Required for voice input — speak your questions to the AI assistant.</string>
+		<key>NSSpeechRecognitionUsageDescription</key>
+		<string>Required to convert your voice to text for AI queries.</string>
+		<key>NSCameraUsageDescription</key>
+		<string>Required to take photos and attach them to your conversation.</string>
 		<key>UIFileSharingEnabled</key>
 		<true/>
 		<key>LSSupportsOpeningDocumentsInPlace</key>

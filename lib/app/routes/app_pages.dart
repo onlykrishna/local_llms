@@ -11,6 +11,8 @@ import '../modules/pdf_chat/bindings/pdf_chat_binding.dart';
 import '../modules/onboarding/views/onboarding_screen.dart';
 import '../modules/settings/views/settings_screen.dart';
 import '../modules/setup/views/setup_screen.dart';
+import '../modules/voice/views/live_voice_screen.dart';
+import '../modules/voice/bindings/live_voice_binding.dart';
 
 part 'app_routes.dart';
 
@@ -57,6 +59,13 @@ class AppPages {
       page: () => const SetupScreen(),
       binding: PdfChatBinding(),
       transition: Transition.cupertino,
+    ),
+    GetPage(
+      name: AppRoutes.LIVE_VOICE,
+      page: () => const LiveVoiceScreen(),
+      binding: LiveVoiceBinding(),
+      transition: Transition.fade,
+      transitionDuration: const Duration(milliseconds: 300),
     ),
   ];
 }

@@ -1,26 +1,59 @@
-enum AiProvider { openai, groq }
+/// AI provider options for chat generation.
+/// Embeddings provider (OpenAI vs HuggingFace) is controlled separately by [EmbeddingService].
+enum AiProvider {
+  groq(
+    'Groq',
+    'llama-3.3-70b-versatile',
+    'https://api.groq.com/openai/v1/chat/completions',
+  ),
+  gemini(
+    'Gemini',
+    'gemini-1.5-flash',
+    'https://generativelanguage.googleapis.com/v1beta/models',
+  ),
+  openai(
+    'OpenAI',
+    'gpt-4o-mini',
+    'https://api.openai.com/v1/chat/completions',
+  ),
+  offline(
+    'Offline (Llama)',
+    'local-gguf',
+    '',
+  );
 
-extension AiProviderExtension on AiProvider {
-  String get displayName {
-    switch (this) {
-      case AiProvider.openai: return 'OpenAI';
-      case AiProvider.groq:   return 'Groq';
-    }
-  }
+  const AiProvider(this.displayName, this.modelId, this.endpoint);
+  final String displayName;
+  final String modelId;
+  final String endpoint;
 
-  String get modelId {
-    switch (this) {
-      case AiProvider.openai: return 'gpt-4o-mini';
-      case AiProvider.groq:   return 'llama-3.3-70b-versatile';
-    }
-  }
+  bool get requiresNetwork => this != AiProvider.offline;
+  bool get requiresApiKey => this != AiProvider.offline;
 
-  String get endpoint {
+  // Returns correct model for the request type
+  String modelIdForRequest({bool hasImage = false}) {
     switch (this) {
-      case AiProvider.openai:
-        return 'https://api.openai.com/v1/chat/completions';
       case AiProvider.groq:
-        return 'https://api.groq.com/openai/v1/chat/completions';
+        // llama-4-scout supports vision; llama-3.3-70b for text-only
+        return hasImage
+            ? 'meta-llama/llama-4-scout-17b-16e-instruct'
+            : 'llama-3.3-70b-versatile';
+      case AiProvider.gemini:
+        return 'gemini-1.5-flash'; // handles both text and vision natively
+      case AiProvider.openai:
+        return 'gpt-4o-mini'; // handles both
+      case AiProvider.offline:
+        return 'local-gguf';
+    }
+  }
+
+  // Env key name for fallback
+  String get envKeyName {
+    switch (this) {
+      case AiProvider.groq: return 'GROQ_API_KEY';
+      case AiProvider.gemini: return 'GEMINI_API_KEY';
+      case AiProvider.openai: return 'OPENAI_API_KEY';
+      case AiProvider.offline: return '';
     }
   }
 }

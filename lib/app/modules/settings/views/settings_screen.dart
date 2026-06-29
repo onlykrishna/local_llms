@@ -2,11 +2,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import '../../../core/services/api_provider_service.dart';
-import '../../../core/models/ai_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/storage_service.dart';
 import '../../../routes/app_pages.dart';
+import 'widgets/ai_engine_section.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -14,7 +13,6 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final apiService = Get.find<ApiProviderService>();
 
     return Scaffold(
       appBar: AppBar(
@@ -27,31 +25,9 @@ class SettingsScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.md),
         children: [
-          // ── AI PROVIDER ──────────────────────────────────
-          _SectionHeader(title: 'AI PROVIDER'),
-          Card(
-            child: Obx(() {
-              final current = apiService.activeProvider.value;
-              return ListTile(
-                leading: const Icon(Icons.psychology_outlined),
-                title: const Text('Active Provider'),
-                subtitle: Text(current.displayName),
-                trailing: DropdownButton<AiProvider>(
-                  value: current,
-                  underline: const SizedBox(),
-                  items: AiProvider.values.map((p) {
-                    return DropdownMenuItem(
-                      value: p,
-                      child: Text(p.displayName),
-                    );
-                  }).toList(),
-                  onChanged: (p) {
-                    if (p != null) apiService.switchProvider(p);
-                  },
-                ),
-              );
-            }),
-          ),
+          // ── AI ENGINE ─────────────────────────────────────
+          _SectionHeader(title: 'AI ENGINE'),
+          const AiEngineSection(),
 
           const SizedBox(height: AppSpacing.md),
 
@@ -63,9 +39,7 @@ class SettingsScreen extends StatelessWidget {
                 ListTile(
                   leading: const Icon(Icons.phone_outlined),
                   title: const Text('Phone Number'),
-                  subtitle: Text(
-                    FirebaseAuth.instance.currentUser?.phoneNumber ?? 'Unknown',
-                  ),
+                  subtitle: Text(_userPhoneNumber),
                 ),
                 const Divider(height: 1),
                 ListTile(
@@ -116,7 +90,6 @@ class SettingsScreen extends StatelessWidget {
                   title: const Text('Privacy Policy'),
                   trailing: const Icon(Icons.arrow_forward_ios, size: 14),
                   onTap: () {
-                    // Developer: replace with real URL
                     Get.snackbar(
                       'Privacy Policy',
                       'Visit https://example.com/privacy',
@@ -132,6 +105,14 @@ class SettingsScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String get _userPhoneNumber {
+    try {
+      return FirebaseAuth.instance.currentUser?.phoneNumber ?? 'Unknown';
+    } catch (_) {
+      return 'Unknown';
+    }
   }
 
   void _confirmSignOut(BuildContext context) {
@@ -151,6 +132,11 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 }
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Section header
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _SectionHeader extends StatelessWidget {
   final String title;
@@ -172,3 +158,4 @@ class _SectionHeader extends StatelessWidget {
     );
   }
 }
+

@@ -1,34 +1,70 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
-import 'package:mockito/annotations.dart';
-import 'package:mockito/mockito.dart';
 
 import 'package:flutter_ai_chat_app/app/core/models/chat_message.dart';
 import 'package:flutter_ai_chat_app/app/core/services/api_provider_service.dart';
 import 'package:flutter_ai_chat_app/app/core/services/chat_history_service.dart';
 import 'package:flutter_ai_chat_app/app/modules/chat/controllers/chat_controller.dart';
 
-import 'chat_controller_test.mocks.dart';
+class FakeApiProviderService extends GetxService implements ApiProviderService {
+  String reply = 'Hello!';
+  List<ChatMessage>? receivedMessages;
 
-@GenerateMocks([ApiProviderService, ChatHistoryService])
+  @override
+  Future<String> sendMessages(List<ChatMessage> messages, {bool voiceMode = false}) async {
+    receivedMessages = messages;
+    return reply;
+  }
+
+  @override
+  bool get isReady => true;
+
+  @override
+  String get readinessError => '';
+
+  @override
+  void clearCache() {}
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class FakeChatHistoryService extends GetxService implements ChatHistoryService {
+  final List<ChatMessage> savedMessages = [];
+  bool deleteChatCalled = false;
+
+  @override
+  Future<List<ChatMessage>> loadMessages(String chatId, {int limit = 50}) async {
+    return [];
+  }
+
+  @override
+  Future<void> saveMessage(String chatId, ChatMessage message) async {
+    savedMessages.add(message);
+  }
+
+  @override
+  Future<void> deleteChat(String chatId) async {
+    deleteChatCalled = true;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 void main() {
   late ChatController controller;
-  late MockApiProviderService mockApi;
-  late MockChatHistoryService mockHistory;
+  late FakeApiProviderService fakeApi;
+  late FakeChatHistoryService fakeHistory;
 
   setUp(() {
     Get.reset();
-    mockApi = MockApiProviderService();
-    mockHistory = MockChatHistoryService();
+    fakeApi = FakeApiProviderService();
+    fakeHistory = FakeChatHistoryService();
 
-    // Register mocks so Get.find works inside the controller
-    Get.put<ApiProviderService>(mockApi);
-    Get.put<ChatHistoryService>(mockHistory);
-
-    // Stub loadMessages to return empty list
-    when(mockHistory.loadMessages(any)).thenAnswer((_) async => []);
-    // Stub saveMessage (fire-and-forget)
-    when(mockHistory.saveMessage(any, any)).thenAnswer((_) async {});
+    // Register fakes so Get.find works inside the controller
+    Get.put<ApiProviderService>(fakeApi);
+    Get.put<ChatHistoryService>(fakeHistory);
 
     controller = ChatController();
     controller.onInit();
@@ -45,7 +81,7 @@ void main() {
     });
 
     test('2. sendMessage() appends a user message immediately (optimistic)', () async {
-      when(mockApi.sendMessages(any)).thenAnswer((_) async => 'Hello!');
+      fakeApi.reply = 'Hello!';
 
       // Don't await — we check optimistic append synchronously
       final future = controller.sendMessage('Test');
@@ -61,14 +97,14 @@ void main() {
     });
 
     test('4. clearConversation() empties the messages list', () async {
-      when(mockApi.sendMessages(any)).thenAnswer((_) async => 'Reply');
-      when(mockHistory.deleteChat(any)).thenAnswer((_) async {});
+      fakeApi.reply = 'Reply';
 
       await controller.sendMessage('Hello');
       expect(controller.messages.isNotEmpty, true);
 
       await controller.clearConversation();
       expect(controller.messages.length, 0);
+      expect(fakeHistory.deleteChatCalled, true);
     });
   });
 }

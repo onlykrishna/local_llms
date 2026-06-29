@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:collection/collection.dart';
 import '../controllers/pdf_chat_controller.dart';
 import 'widgets/pdf_list_panel.dart';
 import 'widgets/upload_progress_card.dart';
@@ -143,8 +144,24 @@ class PdfChatScreen extends GetView<PdfChatController> {
         ),
         MessageInputBar(
           isTyping: controller.isThinking,
-          onSend: (text) => controller.sendQuestion(text),
+          onSend: (text, {attachmentPath}) =>
+              controller.sendQuestion(text, attachmentPath: attachmentPath),
+          onAttach: (filePath, type) {
+            // Files type — delegate to existing RAG upload pipeline
+            if (type == AttachmentType.files) {
+              controller.pickAndUploadPdf();
+            }
+          },
+          onVoiceSend: (text) async {
+            // Send through the RAG pipeline and return the reply directly
+            // so LiveVoiceController can speak it without reading messages.last
+            await controller.sendQuestion(text, voiceMode: true);
+            final lastNonError = controller.messages.reversed
+                .firstWhereOrNull((m) => m.role == PdfChatRole.assistant && !m.isError);
+            return lastNonError?.content ?? '';
+          },
         ),
+
       ],
     );
   }

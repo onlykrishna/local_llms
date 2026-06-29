@@ -38,7 +38,6 @@ class PdfChatService extends GetxService {
     required void Function(String stage, double progress) onProgress,
   }) async {
     final docId = const Uuid().v4();
-    final provider = 'OpenAI';
 
     // Stage 1: Upload to Firebase Storage (0% → 30%)
     onProgress('Uploading to Firebase...', 0.0);
@@ -257,6 +256,7 @@ class PdfChatService extends GetxService {
   Future<String> generateAnswer({
     required String question,
     required List<PdfChunk> chunks,
+    bool voiceMode = false,
   }) async {
     if (chunks.isEmpty) {
       return 'I could not find relevant information in your uploaded PDFs '
@@ -317,7 +317,7 @@ class PdfChatService extends GetxService {
       ),
     ];
 
-    return await _api.sendMessages(messages);
+    return await _api.sendMessages(messages, voiceMode: voiceMode);
   }
 
   // ── ONE-TIME CLEANUP: wipe ALL chunks + docs for full re-indexing ──

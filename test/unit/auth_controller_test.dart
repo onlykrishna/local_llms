@@ -1,25 +1,36 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
-import 'package:mockito/annotations.dart';
-import 'package:mockito/mockito.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import 'package:flutter_ai_chat_app/app/core/services/storage_service.dart';
 import 'package:flutter_ai_chat_app/app/modules/auth/controllers/auth_controller.dart';
 
-import 'auth_controller_test.mocks.dart';
+class FakeStorageService extends GetxService implements StorageService {
+  String? uid;
 
-@GenerateMocks([StorageService])
+  @override
+  String? getUid() => uid;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class FakeFirebaseAuth implements FirebaseAuth {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 void main() {
   late AuthController controller;
-  late MockStorageService mockStorage;
+  late FakeStorageService fakeStorage;
 
   setUp(() {
     Get.reset();
-    mockStorage = MockStorageService();
-    Get.put<StorageService>(mockStorage);
-    when(mockStorage.getUid()).thenReturn(null);
+    fakeStorage = FakeStorageService();
+    Get.put<StorageService>(fakeStorage);
+    fakeStorage.uid = null;
 
-    controller = AuthController();
+    controller = AuthController(auth: FakeFirebaseAuth());
   });
 
   tearDown(() => Get.reset());
@@ -30,9 +41,6 @@ void main() {
     });
 
     test('2. _parseError — invalid-phone-number returns correct string', () {
-      // Access via reflection since it's private — expose for testing
-      // We test indirectly through the verificationFailed callback stub.
-      // The method is internal; this test verifies the error map is correct.
       expect(
         _parseErrorPublic(controller, 'invalid-phone-number'),
         'The phone number entered is invalid.',
@@ -55,9 +63,6 @@ void main() {
   });
 }
 
-// Expose private method for testing via a public wrapper helper.
-// AuthController._parseError is accessed here using the same logic
-// without requiring modifications to the production class.
 String _parseErrorPublic(AuthController ctrl, String code) {
   switch (code) {
     case 'invalid-phone-number':
