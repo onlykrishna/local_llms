@@ -13,7 +13,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../routes/app_pages.dart';
 
 /// Attachment type passed to [onAttach] so each screen can handle it appropriately.
-enum AttachmentType { camera, photos, files }
+enum AttachmentType { camera, photos, files, liveScan }
 
 class MessageInputBar extends StatefulWidget {
   final RxBool isTyping;
@@ -56,10 +56,24 @@ class _MessageInputBarState extends State<MessageInputBar> {
       final hasText = _textController.text.trim().isNotEmpty;
       if (hasText != _hasText) setState(() => _hasText = hasText);
     });
+
+    if (widget.chatController != null) {
+      widget.chatController!.onAppendTextCallback = (text) {
+        final currentText = _textController.text;
+        final separator = currentText.isEmpty || currentText.endsWith(' ') ? '' : ' ';
+        _textController.text = '$currentText$separator$text';
+        _textController.selection = TextSelection.fromPosition(
+          TextPosition(offset: _textController.text.length),
+        );
+      };
+    }
   }
 
   @override
   void dispose() {
+    if (widget.chatController != null) {
+      widget.chatController!.onAppendTextCallback = null;
+    }
     _textController.dispose();
     super.dispose();
   }
@@ -122,6 +136,11 @@ class _MessageInputBarState extends State<MessageInputBar> {
     final analytics = Get.find<AnalyticsService>();
 
     switch (type) {
+      case AttachmentType.liveScan:
+        analytics.logAttachmentUsed('live_scan');
+        widget.onAttach?.call('', AttachmentType.liveScan);
+        break;
+
       case AttachmentType.camera:
         try {
           final picker = ImagePicker();
@@ -626,6 +645,12 @@ class _AttachmentSheet extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.md),
 
+          _AttachmentRow(
+            icon: Icons.document_scanner_rounded,
+            label: 'Live Scan',
+            subtitle: 'OCR & Object Detection',
+            onTap: () => onSelected(AttachmentType.liveScan),
+          ),
           _AttachmentRow(
             icon: Icons.camera_alt_rounded,
             label: 'Camera',

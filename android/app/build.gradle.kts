@@ -49,6 +49,13 @@ android {
     }
 
 
+    // CRITICAL: Prevents aapt from compressing .tflite files.
+    // ML Kit requires the model to be memory-mappable at runtime.
+    // Without this, TFLite throws "Failed to open model file" on Android.
+    androidResources {
+        noCompress += listOf("tflite")
+    }
+
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("release")

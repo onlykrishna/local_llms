@@ -8,6 +8,7 @@ import '../../../core/services/api_provider_service.dart';
 import '../../../core/services/chat_history_service.dart';
 import '../../../core/services/pdf_processing_service.dart';
 import '../views/widgets/message_input_bar.dart';
+import '../../../routes/app_pages.dart';
 
 class ChatController extends GetxController {
 
@@ -23,6 +24,19 @@ class ChatController extends GetxController {
   final RxString attachedPdfText = ''.obs;
   final RxString attachedPdfName = ''.obs;
   final RxBool isExtractingPdf = false.obs;
+
+  // Live Scan state
+  final RxBool isLiveScanActive = false.obs;
+  final RxString liveScanMode = 'ocr'.obs; // 'ocr' or 'object'
+  void Function(String)? onAppendTextCallback;
+
+  void appendText(String text) {
+    onAppendTextCallback?.call(text);
+  }
+
+  void toggleLiveScan(bool active) {
+    isLiveScanActive.value = active;
+  }
 
   // Reactive state
   final RxList<ChatMessage> messages = <ChatMessage>[].obs;
@@ -53,6 +67,11 @@ class ChatController extends GetxController {
   }
 
   Future<void> setAttachment(String filePath, AttachmentType type) async {
+    if (type == AttachmentType.liveScan) {
+      Get.toNamed(AppRoutes.LIVE_SCAN);
+      return;
+    }
+
     if (type == AttachmentType.files) {
       // PDF: extract text and store as context — do NOT navigate away
       isExtractingPdf.value = true;

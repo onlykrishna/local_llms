@@ -67,6 +67,11 @@ dependencies:
   fllama: ^0.0.1                  # Flutter binding for llama.cpp — on-device GGUF inference
   collection: ^1.19.1
 
+  # Live Scan OCR & Object Detection
+  camera: ^0.10.6
+  google_mlkit_text_recognition: ^0.13.0
+  tflite_flutter: ^0.12.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -83,5 +88,7 @@ flutter:
   assets:
     - .env
     - assets/images/
+    - assets/models/
+
 
 

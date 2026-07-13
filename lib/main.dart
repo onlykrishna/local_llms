@@ -21,6 +21,7 @@ import 'app/core/services/pdf_processing_service.dart';
 import 'app/core/services/storage_service.dart';
 import 'app/core/services/voice_service.dart';
 import 'app/core/services/google_tts_service.dart';
+import 'app/core/services/live_scan_service.dart';
 import 'app/core/theme/app_theme.dart';
 import 'app/core/theme/theme_controller.dart';
 import 'app/routes/app_pages.dart';
@@ -90,6 +91,7 @@ void main() async {
   Get.put(PdfProcessingService());
   Get.put(EmbeddingService());
   Get.put(PdfChatService());
+  Get.put(LiveScanService());
   Get.put(AnalyticsService());
 
   // 8. Enable Analytics collection

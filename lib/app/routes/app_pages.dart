@@ -13,6 +13,8 @@ import '../modules/settings/views/settings_screen.dart';
 import '../modules/setup/views/setup_screen.dart';
 import '../modules/voice/views/live_voice_screen.dart';
 import '../modules/voice/bindings/live_voice_binding.dart';
+import '../modules/chat/views/live_scan_screen.dart';
+import '../modules/chat/bindings/live_scan_binding.dart';
 
 part 'app_routes.dart';
 
@@ -66,6 +68,12 @@ class AppPages {
       binding: LiveVoiceBinding(),
       transition: Transition.fade,
       transitionDuration: const Duration(milliseconds: 300),
+    ),
+    GetPage(
+      name: AppRoutes.LIVE_SCAN,
+      page: () => const LiveScanScreen(),
+      binding: LiveScanBinding(),
+      transition: Transition.cupertino,
     ),
   ];
 }
