@@ -72,6 +72,11 @@ class ChatController extends GetxController {
       return;
     }
 
+    if (type == AttachmentType.liveVision) {
+      Get.toNamed(AppRoutes.LIVE_VISION);
+      return;
+    }
+
     if (type == AttachmentType.files) {
       // PDF: extract text and store as context — do NOT navigate away
       isExtractingPdf.value = true;

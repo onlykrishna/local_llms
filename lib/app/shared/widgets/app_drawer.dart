@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/services/embedding_service.dart';
 import '../../core/services/storage_service.dart';
+import '../../core/services/floating_bubble_service.dart';
 import '../../routes/app_pages.dart';
 
 class AppDrawer extends StatelessWidget {
@@ -10,6 +11,7 @@ class AppDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    debugPrint('AppDrawer: building child list. Toggle present: Floating Answer Bubble SwitchListTile');
     final theme = Theme.of(context);
     final embeddingSvc = Get.find<EmbeddingService>();
     final auth = FirebaseAuth.instance;
@@ -75,6 +77,42 @@ class AppDrawer extends StatelessWidget {
               Get.toNamed(AppRoutes.PDF_CHAT);
             },
           ),
+          ListTile(
+            leading: const Icon(Icons.remove_red_eye_outlined),
+            title: const Text('Live Vision'),
+            subtitle: const Text('AI narrates what it sees'),
+            onTap: () {
+              Get.back();
+              Get.toNamed(AppRoutes.LIVE_VISION);
+            },
+          ),
+          
+          // ── FLOATING ANSWER BUBBLE TOGGLE ────────────────
+          Builder(builder: (context) {
+            final bubbleService = Get.find<FloatingBubbleService>();
+            final isAndroid = Theme.of(context).platform == TargetPlatform.android;
+            return Obx(() {
+              final active = bubbleService.isBubbleActive.value;
+              return SwitchListTile(
+                secondary: Icon(
+                  Icons.layers_rounded,
+                  color: active ? Theme.of(context).colorScheme.primary : null,
+                ),
+                title: const Text('Floating Answer Bubble'),
+                subtitle: Text(
+                  isAndroid 
+                      ? 'Analyze screens system-wide' 
+                      : 'Quick Answer (in-app only)',
+                  style: const TextStyle(fontSize: 11),
+                ),
+                value: active,
+                onChanged: (val) {
+                  // Do not close drawer, just toggle
+                  bubbleService.toggleBubble();
+                },
+              );
+            });
+          }),
           
           const Spacer(),
           

@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:audio_session/audio_session.dart';
 import 'google_tts_service.dart';
 
 /// Provides on-device Speech-to-Text and Text-to-Speech.
@@ -34,7 +36,27 @@ class VoiceService extends GetxService {
   @override
   void onInit() {
     super.onInit();
+    _configureAudioSession();
     _initTts();
+  }
+
+  Future<void> _configureAudioSession() async {
+    try {
+      final session = await AudioSession.instance;
+      await session.configure(const AudioSessionConfiguration(
+        avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
+        avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.defaultToSpeaker,
+        avAudioSessionMode: AVAudioSessionMode.defaultMode,
+        androidAudioAttributes: AndroidAudioAttributes(
+          contentType: AndroidAudioContentType.speech,
+          usage: AndroidAudioUsage.media,
+        ),
+        androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+      ));
+      debugPrint('🔊 VoiceService: AudioSession configured (playAndRecord, defaultToSpeaker, media)');
+    } catch (e) {
+      debugPrint('⚠️ VoiceService: Failed to configure AudioSession: $e');
+    }
   }
 
   Future<void> _initTts() async {
@@ -49,6 +71,24 @@ class VoiceService extends GetxService {
 
     // Volume: maximum
     await _tts.setVolume(1.0);
+
+    // Configure iOS category at the plugin level for extra redundancy
+    try {
+      if (Platform.isIOS) {
+        await _tts.setSharedInstance(true);
+        await _tts.setIosAudioCategory(
+          IosTextToSpeechAudioCategory.playAndRecord,
+          [
+            IosTextToSpeechAudioCategoryOptions.defaultToSpeaker,
+            IosTextToSpeechAudioCategoryOptions.mixWithOthers,
+          ],
+          IosTextToSpeechAudioMode.defaultMode,
+        );
+        debugPrint('🔊 VoiceService: flutter_tts iOS category set to playAndRecord');
+      }
+    } catch (e) {
+      debugPrint('⚠️ VoiceService: flutter_tts iOS category config failed: $e');
+    }
 
     // Select the highest quality available voice
     await _selectBestVoice();
@@ -271,43 +311,74 @@ class VoiceService extends GetxService {
   ///   TODO: When API providers are active, prefer cloud TTS (OpenAI/Google TTS)
   ///   with on-device flutter_tts as fallback.
   Future<void> speak(String text) async {
-    if (text.trim().isEmpty) return;
-
-    isSpeaking.value = true;
-
-    try {
-      // Try Google Cloud TTS first (much better quality)
-      final googleTts = Get.find<GoogleTtsService>();
-      if (googleTts.isAvailable) {
-        await googleTts.speak(text);
-        isSpeaking.value = false;
-        return;
-      }
-    } catch (_) {
-      // GoogleTtsService not registered or unavailable — fall through
+    if (text.trim().isEmpty) {
+      debugPrint('🔊 VoiceService: speak() called with empty text, skipping.');
+      return;
     }
 
-    // Fallback: on-device flutter_tts
+    debugPrint('🔊 VoiceService: speak() invoked for text: "$text"');
+    isSpeaking.value = true;
+
+    // Reassert audio session category configuration right before speaking
+    // to override any changes made by the STT / mic recording system.
+    await _configureAudioSession();
+
+    // ── 1. Google Cloud TTS ───────────────────────────────────
+    try {
+      final googleTts = Get.find<GoogleTtsService>();
+      if (googleTts.isAvailable) {
+        debugPrint('🔊 VoiceService: GoogleTtsService is available. Launching speak...');
+        final startTime = DateTime.now();
+        await googleTts.speak(text);
+        final elapsed = DateTime.now().difference(startTime).inMilliseconds;
+        debugPrint('🔊 VoiceService: GoogleTtsService speak completed in ${elapsed}ms');
+        isSpeaking.value = false;
+        return;
+      } else {
+        debugPrint('🔊 VoiceService: GoogleTtsService is not available (no API key).');
+      }
+    } catch (e) {
+      debugPrint('⚠️ VoiceService: GoogleTtsService failed or threw exception: $e. Falling back to on-device TTS...');
+    }
+
+    // ── 2. Fallback: on-device flutter_tts ─────────────────────
+    debugPrint('🔊 VoiceService: Falling back to on-device flutter_tts...');
     final completer = Completer<void>();
 
+    _tts.setStartHandler(() {
+      debugPrint('🔊 VoiceService: on-device TTS has started speaking.');
+    });
+
     _tts.setCompletionHandler(() {
+      debugPrint('🔊 VoiceService: on-device TTS has finished speaking.');
       isSpeaking.value = false;
       if (!completer.isCompleted) completer.complete();
     });
 
     _tts.setErrorHandler((message) {
-      debugPrint('❌ TTS fallback error: $message');
+      debugPrint('❌ VoiceService: on-device TTS error: $message');
       isSpeaking.value = false;
       if (!completer.isCompleted) completer.complete();
     });
 
-    debugPrint('🔊 VoiceService: Speaking via on-device TTS (provider: fallback)');
-    await _tts.speak(text);
-
-    await completer.future.timeout(
-      const Duration(seconds: 60),
-      onTimeout: () { isSpeaking.value = false; },
-    );
+    try {
+      final startTime = DateTime.now();
+      await _tts.speak(text);
+      debugPrint('🔊 VoiceService: flutter_tts.speak() dispatch call returned.');
+      
+      await completer.future.timeout(
+        const Duration(seconds: 45),
+        onTimeout: () {
+          debugPrint('⚠️ VoiceService: on-device TTS speak timed out after 45s.');
+          isSpeaking.value = false;
+        },
+      );
+      final elapsed = DateTime.now().difference(startTime).inMilliseconds;
+      debugPrint('🔊 VoiceService: flutter_tts execution loop finished in ${elapsed}ms');
+    } catch (e) {
+      debugPrint('❌ VoiceService: flutter_tts.speak() threw exception: $e');
+      isSpeaking.value = false;
+    }
   }
 
   /// Stops any ongoing TTS playback.

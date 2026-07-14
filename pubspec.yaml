@@ -58,6 +58,7 @@ dependencies:
   speech_to_text: ^7.0.0          # on-device STT (Android SpeechRecognizer / iOS Speech)
   flutter_tts: ^4.2.0             # on-device TTS for offline voice mode
   just_audio: ^0.9.40             # for MP3 playback of Google Cloud TTS
+  audio_session: ^0.1.21
 
   permission_handler: ^11.3.1     # mic + camera + storage permissions
   image_picker: ^1.1.2            # camera + photo library for attachment menu

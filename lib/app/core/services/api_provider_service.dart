@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -236,6 +237,98 @@ class ApiProviderService extends GetxService {
 
     // ── GROQ / OPENAI (OpenAI-compatible format) ──────────────────────────────
     return _sendOpenAiCompatible(apiMessages, modelId, apiKey, provider);
+  }
+  /// Sends a vision-specific request. If [prioritizeGroq] is true, tries Groq first
+  /// with an optional [timeout] before falling back to Gemini.
+  Future<String> sendVisionRequest({
+    required String base64Image,
+    required String prompt,
+    required String systemInstruction,
+    bool prioritizeGroq = false,
+    Duration? timeout,
+  }) async {
+    final messages = [
+      ChatMessage(
+        id: 'system',
+        role: MessageRole.system,
+        content: systemInstruction,
+        timestamp: DateTime.now(),
+      ),
+      ChatMessage(
+        id: 'user',
+        role: MessageRole.user,
+        content: prompt,
+        timestamp: DateTime.now(),
+        imageBase64: base64Image,
+        imageMimeType: 'image/jpeg',
+      ),
+    ];
+
+    Future<String> attemptGemini() async {
+      final geminiApiKey = _sanitizeKey(
+        geminiKey.value.isNotEmpty ? geminiKey.value : dotenv.env['GEMINI_API_KEY']
+      );
+      if (geminiApiKey.isEmpty) {
+        throw Exception('Gemini API key is not configured.');
+      }
+      final modelId = 'gemini-1.5-flash';
+      final startTime = DateTime.now();
+      debugPrint('👁️ Live Vision: Attempting Gemini 1.5 Flash...');
+      
+      Future<String> call = _sendGemini(messages, modelId, geminiApiKey, true);
+      if (timeout != null) {
+        call = call.timeout(timeout);
+      }
+      final response = await call;
+      final latency = DateTime.now().difference(startTime).inMilliseconds;
+      debugPrint('👁️ Live Vision [Gemini]: Success in ${latency}ms');
+      return response;
+    }
+
+    Future<String> attemptGroq() async {
+      final groqApiKey = _sanitizeKey(
+        groqKey.value.isNotEmpty ? groqKey.value : dotenv.env['GROQ_API_KEY']
+      );
+      if (groqApiKey.isEmpty) {
+        throw Exception('Groq API key is not configured.');
+      }
+      final modelId = 'meta-llama/llama-4-scout-17b-16e-instruct';
+      final startTime = DateTime.now();
+      debugPrint('👁️ Live Vision: Attempting Groq llama-4-scout...');
+      
+      Future<String> call = _sendOpenAiCompatible(messages, modelId, groqApiKey, AiProvider.groq);
+      if (timeout != null) {
+        call = call.timeout(timeout);
+      }
+      final response = await call;
+      final latency = DateTime.now().difference(startTime).inMilliseconds;
+      debugPrint('👁️ Live Vision [Groq]: Success in ${latency}ms');
+      return response;
+    }
+
+    if (prioritizeGroq) {
+      try {
+        return await attemptGroq();
+      } catch (e) {
+        debugPrint('⚠️ Live Vision: Groq failed/timed out ($e). Falling back to Gemini...');
+        try {
+          return await attemptGemini();
+        } catch (e2) {
+          throw Exception('Vision call failed: both Groq and Gemini failed. (Groq: $e, Gemini: $e2)');
+        }
+      }
+    } else {
+      try {
+        return await attemptGemini();
+      } catch (e) {
+        debugPrint('⚠️ Live Vision: Gemini failed/timed out ($e). Falling back to Groq...');
+        try {
+          return await attemptGroq();
+        } catch (e2) {
+          throw Exception('Vision call failed: both Gemini and Groq failed. (Gemini: $e, Groq: $e2)');
+        }
+      }
+    }
   }
 
   Future<String> _sendOpenAiCompatible(

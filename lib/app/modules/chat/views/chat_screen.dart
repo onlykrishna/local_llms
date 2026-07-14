@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:collection/collection.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../controllers/chat_controller.dart';
 import 'widgets/chat_bubble.dart';
 import 'widgets/typing_indicator.dart';
@@ -9,9 +8,8 @@ import 'widgets/message_input_bar.dart';
 import 'package:flutter_ai_chat_app/app/core/models/ai_provider.dart';
 import 'package:flutter_ai_chat_app/app/core/models/chat_message.dart';
 import 'package:flutter_ai_chat_app/app/core/services/api_provider_service.dart';
-import 'package:flutter_ai_chat_app/app/core/services/storage_service.dart';
-import 'package:flutter_ai_chat_app/app/routes/app_pages.dart';
 import 'package:flutter_ai_chat_app/app/shared/widgets/no_connection_banner.dart';
+import 'package:flutter_ai_chat_app/app/shared/widgets/app_drawer.dart';
 
 const kPrimary     = Color(0xFF6C63FF);
 const kPrimaryDark = Color(0xFF4B44CC);
@@ -215,8 +213,7 @@ class ChatScreen extends GetView<ChatController> {
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-    final userPhone = user?.phoneNumber ?? "Guest User";
+
 
     // Auto-scroll on new message
     ever(controller.messages, (_) {
@@ -288,138 +285,7 @@ class ChatScreen extends GetView<ChatController> {
       ),
 
       // Professional Drawer
-      drawer: Drawer(
-        backgroundColor: kBg,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Drawer Header with profile card
-            Container(
-              padding: EdgeInsets.only(
-                top: MediaQuery.of(context).padding.top + 24,
-                bottom: 24,
-                left: 20,
-                right: 20,
-              ),
-              decoration: const BoxDecoration(gradient: kGradient),
-              child: Row(
-                children: [
-                  Container(
-                    width: 52,
-                    height: 52,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.18),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.person_rounded,
-                      color: Colors.white,
-                      size: 28,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          "Welcome Back",
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 12,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          userPhone,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            // Navigation links
-            ListTile(
-              leading: const Icon(Icons.storage_rounded, color: kPrimary),
-              title: const Text(
-                'Setup Knowledge Base',
-                style: TextStyle(color: kText1, fontWeight: FontWeight.w600),
-              ),
-              subtitle: const Text('Manage & Index PDFs', style: TextStyle(fontSize: 11)),
-              onTap: () {
-                Get.back(); // close drawer
-                Get.toNamed(AppRoutes.SETUP);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.picture_as_pdf_outlined, color: kPrimary),
-              title: const Text(
-                'RAG PDF Chat',
-                style: TextStyle(color: kText1, fontWeight: FontWeight.w600),
-              ),
-              subtitle: const Text('Query indexed documents', style: TextStyle(fontSize: 11)),
-              onTap: () {
-                Get.back(); // close drawer
-                Get.toNamed(AppRoutes.PDF_CHAT);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.settings_outlined, color: kText2),
-              title: const Text(
-                'Settings',
-                style: TextStyle(color: kText1),
-              ),
-              onTap: () {
-                Get.back(); // close drawer
-                Get.toNamed(AppRoutes.SETTINGS);
-              },
-            ),
-
-            const Spacer(),
-            const Divider(color: kBorder, height: 1),
-
-            // Clear Conversation
-            ListTile(
-              leading: const Icon(Icons.delete_outline_rounded, color: kError),
-              title: const Text(
-                'Clear Chat History',
-                style: TextStyle(color: kError, fontWeight: FontWeight.w600),
-              ),
-              onTap: () {
-                Get.back();
-                _confirmClear(context);
-              },
-            ),
-
-            // Logout Action
-            ListTile(
-              leading: const Icon(Icons.logout_rounded, color: kText2),
-              title: const Text(
-                'Logout',
-                style: TextStyle(color: kText1),
-              ),
-              onTap: () async {
-                Get.back();
-                await FirebaseAuth.instance.signOut();
-                await Get.find<StorageService>().clearUid();
-                Get.offAllNamed(AppRoutes.PHONE_INPUT);
-              },
-            ),
-            const SizedBox(height: 12),
-          ],
-        ),
-      ),
+      drawer: const AppDrawer(),
 
       body: Column(
         children: [

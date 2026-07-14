@@ -13,7 +13,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../routes/app_pages.dart';
 
 /// Attachment type passed to [onAttach] so each screen can handle it appropriately.
-enum AttachmentType { camera, photos, files, liveScan }
+enum AttachmentType { camera, photos, files, liveScan, liveVision }
 
 class MessageInputBar extends StatefulWidget {
   final RxBool isTyping;
@@ -139,6 +139,11 @@ class _MessageInputBarState extends State<MessageInputBar> {
       case AttachmentType.liveScan:
         analytics.logAttachmentUsed('live_scan');
         widget.onAttach?.call('', AttachmentType.liveScan);
+        break;
+
+      case AttachmentType.liveVision:
+        analytics.logAttachmentUsed('live_vision');
+        widget.onAttach?.call('', AttachmentType.liveVision);
         break;
 
       case AttachmentType.camera:
@@ -650,6 +655,12 @@ class _AttachmentSheet extends StatelessWidget {
             label: 'Live Scan',
             subtitle: 'OCR & Object Detection',
             onTap: () => onSelected(AttachmentType.liveScan),
+          ),
+          _AttachmentRow(
+            icon: Icons.visibility_rounded,
+            label: 'Live Vision',
+            subtitle: 'AI ambient camera narration',
+            onTap: () => onSelected(AttachmentType.liveVision),
           ),
           _AttachmentRow(
             icon: Icons.camera_alt_rounded,

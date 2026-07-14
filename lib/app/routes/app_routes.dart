@@ -13,4 +13,5 @@ abstract class AppRoutes {
   static const SETUP = '/setup';
   static const LIVE_VOICE = '/live-voice';
   static const LIVE_SCAN = '/live-scan';
+  static const LIVE_VISION = '/live-vision';
 }

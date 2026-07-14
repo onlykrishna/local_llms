@@ -22,6 +22,7 @@ import 'app/core/services/storage_service.dart';
 import 'app/core/services/voice_service.dart';
 import 'app/core/services/google_tts_service.dart';
 import 'app/core/services/live_scan_service.dart';
+import 'app/core/services/floating_bubble_service.dart';
 import 'app/core/theme/app_theme.dart';
 import 'app/core/theme/theme_controller.dart';
 import 'app/routes/app_pages.dart';
@@ -93,6 +94,7 @@ void main() async {
   Get.put(PdfChatService());
   Get.put(LiveScanService());
   Get.put(AnalyticsService());
+  Get.put(FloatingBubbleService());
 
   // 8. Enable Analytics collection
   await FirebaseAnalytics.instance.setAnalyticsCollectionEnabled(!kDebugMode);
@@ -107,13 +109,16 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GetMaterialApp(
-      title: 'AI Chat',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(),
-      themeMode: ThemeMode.light,
-      initialRoute: AppRoutes.PHONE_INPUT,
-      getPages: AppPages.routes,
+    return RepaintBoundary(
+      key: FloatingBubbleService.rootBoundaryKey,
+      child: GetMaterialApp(
+        title: 'AI Chat',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.light(),
+        themeMode: ThemeMode.light,
+        initialRoute: AppRoutes.PHONE_INPUT,
+        getPages: AppPages.routes,
+      ),
     );
   }
 }
