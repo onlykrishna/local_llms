@@ -4,7 +4,7 @@ import 'package:tflite_flutter/tflite_flutter.dart';
 
 void main() {
   test('inspect model', () async {
-    final file = File('assets/models/object_labeler.tflite');
+    final file = File('assets/models/yolov8n.tflite');
     expect(file.existsSync(), isTrue);
     final interpreter = Interpreter.fromFile(file);
     print('=== Model Tensors ===');

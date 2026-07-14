@@ -13,6 +13,7 @@ import '../controllers/chat_controller.dart';
 
 class LiveScanController extends GetxController {
   final LiveScanService _scanService = Get.find<LiveScanService>();
+  Worker? _detectionsWorker;
 
   CameraController? cameraController;
   List<CameraDescription> cameras = [];
@@ -50,13 +51,18 @@ class LiveScanController extends GetxController {
   double _maxZoom = 1.0;
 
   /// Minimum confidence threshold for object detection (0.0 – 1.0).
-  final RxDouble confidenceThreshold = 0.5.obs;
+  final RxDouble confidenceThreshold = 0.45.obs;
 
-  // ── Frame-processing throttle ──────────────────────────────────────────────
+  // ── Frame-processing throttle ───────────────────────────────────────────────────
 
   /// DateTime-based throttle — avoids holding async context across frames.
   DateTime _lastProcessed = DateTime.fromMillisecondsSinceEpoch(0);
+  bool _isProcessingFrame = false;
+  /// 300ms throttle (~3 FPS ML processing) keeps the camera feed smooth.
   static const _throttleMs = 300;
+
+  /// Index of the currently active camera (0 = back, 1 = front on most devices).
+  int _activeCameraIndex = 0;
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
@@ -85,29 +91,44 @@ class LiveScanController extends GetxController {
       return;
     }
 
-    // Step 2: Initialize ML detectors (may copy TFLite model; shows 'loading' status)
+    // Step 2: Initialize ML detectors (OCR + YOLO via flutter_vision)
     try {
       await _scanService.initializeDetectors();
+
+      // Bind to service's reactive detections stream.
+      _detectionsWorker?.dispose();
+      _detectionsWorker = ever(_scanService.latestDetections, (detections) {
+        if (scanMode.value == 'object') {
+          final filtered = detections.where((obj) {
+            if (obj.labels.isEmpty) return false;
+            return obj.labels.first.confidence >= confidenceThreshold.value;
+          }).toList();
+
+          detectedObjects.assignAll(filtered);
+          detectedTexts.clear();
+        }
+      });
     } catch (e) {
       debugPrint('❌ LiveScanController: Detector init failed: $e');
       return;
     }
 
-    // Step 3: Initialize Camera
+    // Step 3: Initialize camera (single controller for both OCR and YOLO)
+    await _startCamera();
+  }
+
+  Future<void> _startCamera({int? cameraIndex}) async {
     try {
       cameras = await availableCameras();
       if (cameras.isEmpty) throw Exception('No cameras available on this device.');
 
-      final backCamera = cameras.firstWhere(
-        (c) => c.lensDirection == CameraLensDirection.back,
-        orElse: () => cameras.first,
-      );
-
-      cameraController = null;
+      final idx = cameraIndex ??
+          cameras.indexWhere((c) => c.lensDirection == CameraLensDirection.back);
+      _activeCameraIndex = idx < 0 ? 0 : idx;
 
       final cc = CameraController(
-        backCamera,
-        ResolutionPreset.high,
+        cameras[_activeCameraIndex],
+        ResolutionPreset.medium, // Medium = better FPS for YOLO
         enableAudio: false,
         imageFormatGroup: Platform.isAndroid
             ? ImageFormatGroup.nv21
@@ -115,10 +136,8 @@ class LiveScanController extends GetxController {
       );
 
       await cc.initialize();
-
       _minZoom = await cc.getMinZoomLevel();
       _maxZoom = await cc.getMaxZoomLevel();
-
       await cc.startImageStream(_onCameraFrameReceived);
 
       cameraController = cc;
@@ -130,7 +149,7 @@ class LiveScanController extends GetxController {
       isCameraInitialized.value = false;
       Get.snackbar(
         'Camera Error',
-        'Could not start camera preview: $e',
+        'Could not start camera: $e',
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.redAccent.withAlpha(200),
         colorText: Colors.white,
@@ -139,6 +158,9 @@ class LiveScanController extends GetxController {
   }
 
   Future<void> _tearDown() async {
+    _detectionsWorker?.dispose();
+    _detectionsWorker = null;
+
     if (cameraController != null) {
       try {
         if (cameraController!.value.isStreamingImages) {
@@ -161,7 +183,8 @@ class LiveScanController extends GetxController {
     if (scanMode.value == mode) return;
     scanMode.value = mode;
     _clearResults();
-    if (isFrozen.value) _resumeStream();
+    if (isFrozen.value) isFrozen.value = false;
+    // Both modes use the same camera stream — no camera restart needed.
   }
 
   void _clearResults() {
@@ -170,6 +193,7 @@ class LiveScanController extends GetxController {
     lastOcrResult.value = null;
     absoluteImageSize.value = null;
     imageRotation.value = null;
+    _scanService.latestDetections.clear();
   }
 
   // ── Camera Controls ────────────────────────────────────────────────────────
@@ -211,22 +235,44 @@ class LiveScanController extends GetxController {
   double get minZoom => _minZoom;
   double get maxZoom => _maxZoom;
 
+  /// Switches between front and back camera.
+  Future<void> flipCamera() async {
+    if (cameras.length < 2) return;
+    final nextIndex = (_activeCameraIndex + 1) % cameras.length;
+    try {
+      isCameraInitialized.value = false;
+
+      if (cameraController != null) {
+        if (cameraController!.value.isStreamingImages) {
+          try { await cameraController!.stopImageStream(); } catch (_) {}
+        }
+        await cameraController!.dispose();
+        cameraController = null;
+      }
+
+      await Future.delayed(const Duration(milliseconds: 300));
+      await _startCamera(cameraIndex: nextIndex);
+    } catch (e) {
+      debugPrint('⚠️ LiveScanController: Flip camera error: $e');
+      await Future.delayed(const Duration(milliseconds: 500));
+      _initializeCameraAndDetectors();
+    }
+  }
+
   // ── Freeze-Frame Capture ───────────────────────────────────────────────────
 
   CameraImage? _lastCapturedImage;
 
   /// Freezes the live stream and processes the last frame.
   Future<void> captureSnapshot() async {
-    if (!isCameraInitialized.value || cameraController == null || isFrozen.value) return;
+    if (isFrozen.value) return;
     HapticFeedback.mediumImpact();
-
     try {
       isFrozen.value = true;
-      if (cameraController!.value.isStreamingImages) {
+      if (cameraController != null && cameraController!.value.isStreamingImages) {
         await cameraController!.stopImageStream();
       }
-
-      if (_lastCapturedImage != null) {
+      if (_lastCapturedImage != null && scanMode.value == 'ocr') {
         await _processFrame(_lastCapturedImage!);
       }
     } catch (e) {
@@ -235,9 +281,8 @@ class LiveScanController extends GetxController {
   }
 
   Future<void> _resumeStream() async {
-    if (!isCameraInitialized.value || cameraController == null) return;
     try {
-      if (!cameraController!.value.isStreamingImages) {
+      if (cameraController != null && !cameraController!.value.isStreamingImages) {
         await cameraController!.startImageStream(_onCameraFrameReceived);
       }
     } catch (e) {
@@ -252,25 +297,40 @@ class LiveScanController extends GetxController {
   // ── Frame Processing Pipeline ──────────────────────────────────────────────
 
   void _onCameraFrameReceived(CameraImage image) {
+    if (cameraController == null || !cameraController!.value.isInitialized) return;
+    if (isCameraInitialized.value == false) return;
+    if (_isProcessingFrame || _scanService.isBusy) return;
+
     final now = DateTime.now();
     if (now.difference(_lastProcessed).inMilliseconds < _throttleMs) return;
     if (isFrozen.value) return;
     _lastProcessed = now;
 
     _lastCapturedImage = image;
-    _processFrame(image);
+    _isProcessingFrame = true;
+    _processFrame(image).then((_) {
+      _isProcessingFrame = false;
+    }).catchError((e) {
+      _isProcessingFrame = false;
+    });
   }
 
   Future<void> _processFrame(CameraImage image) async {
-    final camera = cameras.firstWhere(
-      (c) => c.lensDirection == CameraLensDirection.back,
-      orElse: () => cameras.first,
-    );
-
-    final rotation = InputImageRotationValue.fromRawValue(camera.sensorOrientation)
-        ?? InputImageRotation.rotation0deg;
-
     if (scanMode.value == 'ocr') {
+      // ── OCR path ────────────────────────────────────────────────────────
+      final camera = cameras.isNotEmpty ? cameras[_activeCameraIndex] : null;
+      if (camera == null) return;
+
+      final rotation = InputImageRotationValue.fromRawValue(camera.sensorOrientation)
+          ?? (Platform.isAndroid
+              ? InputImageRotation.rotation90deg
+              : InputImageRotation.rotation0deg);
+
+      final bool isRotated = rotation == InputImageRotation.rotation90deg ||
+          rotation == InputImageRotation.rotation270deg;
+      final double portraitW = isRotated ? image.height.toDouble() : image.width.toDouble();
+      final double portraitH = isRotated ? image.width.toDouble() : image.height.toDouble();
+
       final inputImage = _buildInputImage(image);
       if (inputImage == null) return;
 
@@ -283,31 +343,38 @@ class LiveScanController extends GetxController {
       for (final block in result.blocks) {
         for (final line in block.lines) {
           final text = line.text.trim();
-          if (text.isNotEmpty && seen.add(text)) {
-            ordered.add(text);
-          }
+          if (text.isNotEmpty && seen.add(text)) ordered.add(text);
         }
       }
       detectedTexts.assignAll(ordered);
       detectedObjects.clear();
 
-      absoluteImageSize.value = Size(image.width.toDouble(), image.height.toDouble());
+      absoluteImageSize.value = Size(portraitW, portraitH);
       imageRotation.value = rotation;
     } else {
-      // Process object detection directly via raw CameraImage & tflite_flutter
-      final objects = await _scanService.processObjects(image);
-      if (objects == null) return;
+      // ── YOLO object detection path ──────────────────────────────────────
+      final camera = cameras.isNotEmpty ? cameras[_activeCameraIndex] : null;
+      if (camera == null) return;
 
-      final filtered = objects.where((obj) {
-        if (obj.labels.isEmpty) return false;
-        return obj.labels.first.confidence >= confidenceThreshold.value;
-      }).toList();
+      final rotation = InputImageRotationValue.fromRawValue(camera.sensorOrientation)
+          ?? (Platform.isAndroid
+              ? InputImageRotation.rotation90deg
+              : InputImageRotation.rotation0deg);
 
-      detectedObjects.assignAll(filtered);
-      detectedTexts.clear();
+      final bool isRotated = rotation == InputImageRotation.rotation90deg ||
+          rotation == InputImageRotation.rotation270deg;
+      final double portraitW = isRotated ? image.height.toDouble() : image.width.toDouble();
+      final double portraitH = isRotated ? image.width.toDouble() : image.height.toDouble();
 
-      absoluteImageSize.value = Size(image.width.toDouble(), image.height.toDouble());
+      absoluteImageSize.value = Size(portraitW, portraitH);
       imageRotation.value = rotation;
+
+      // Do not await processYolo so the UI thread doesn't pause for isolate messaging
+      _scanService.processYolo(
+        image,
+        rotation,
+        confidenceThreshold: confidenceThreshold.value,
+      );
     }
   }
 
@@ -315,13 +382,13 @@ class LiveScanController extends GetxController {
 
   InputImage? _buildInputImage(CameraImage image) {
     try {
-      final camera = cameras.firstWhere(
-        (c) => c.lensDirection == CameraLensDirection.back,
-        orElse: () => cameras.first,
-      );
+      final camera = cameras.isNotEmpty ? cameras[_activeCameraIndex] : null;
+      if (camera == null) return null;
 
       final rotation = InputImageRotationValue.fromRawValue(camera.sensorOrientation)
-          ?? InputImageRotation.rotation0deg;
+          ?? (Platform.isAndroid
+              ? InputImageRotation.rotation90deg
+              : InputImageRotation.rotation0deg);
 
       final Size imageSize = Size(image.width.toDouble(), image.height.toDouble());
 
@@ -331,7 +398,6 @@ class LiveScanController extends GetxController {
           allBytes.putUint8List(plane.bytes);
         }
         final bytes = allBytes.done().buffer.asUint8List();
-
         final metadata = InputImageMetadata(
           size: imageSize,
           rotation: rotation,

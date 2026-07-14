@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../controllers/live_scan_controller.dart';
+import '../../../../core/theme/app_theme.dart';
 
 /// Bottom control bar for the Live ML Scanner.
 ///
 /// Contains:
 ///  - Torch (flashlight) toggle
-///  - Zoom slider (1x – max device zoom)
-///  - Confidence threshold selector (Low / Medium / High presets)
+///  - Flip camera button
+///  - Confidence threshold presets (object detection mode only)
+///  - Zoom slider (when device supports zoom > 1x)
 class ScanControlsBar extends StatelessWidget {
   const ScanControlsBar({super.key});
 
@@ -17,7 +19,7 @@ class ScanControlsBar extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest.withAlpha(200),
         borderRadius: BorderRadius.circular(16),
@@ -25,8 +27,9 @@ class ScanControlsBar extends StatelessWidget {
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ── Row 1: Torch + Confidence presets ─────────────────────────────
+          // ── Row 1: Camera buttons ──────────────────────────────────────────
           Row(
             children: [
               // Torch toggle
@@ -41,50 +44,78 @@ class ScanControlsBar extends StatelessWidget {
                 theme: theme,
               )),
               const SizedBox(width: 8),
-              // Confidence presets
-              Expanded(
-                child: Obx(() => _ConfidenceSelector(
-                  threshold: controller.confidenceThreshold.value,
-                  onChanged: controller.setConfidenceThreshold,
-                  theme: theme,
-                )),
+
+              // Flip camera button
+              _ControlButton(
+                icon: Icons.flip_camera_android_rounded,
+                label: 'Flip Camera',
+                active: false,
+                onTap: controller.flipCamera,
+                activeColor: AppColors.primary,
+                theme: theme,
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          // ── Row 2: Zoom slider ────────────────────────────────────────────
+
+          // ── Row 2: Confidence presets (only visible in object detection mode) ─
+          Obx(() {
+            if (controller.scanMode.value != 'object') return const SizedBox.shrink();
+            return Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(
+                children: [
+                  Text(
+                    'Confidence:',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant.withAlpha(160),
+                    ),
+                  ),
+                  const Spacer(),
+                  Obx(() => _ConfidenceSelector(
+                    threshold: controller.confidenceThreshold.value,
+                    onChanged: controller.setConfidenceThreshold,
+                    theme: theme,
+                  )),
+                ],
+              ),
+            );
+          }),
+
+          // ── Row 3: Zoom slider ────────────────────────────────────────────
           Obx(() {
             final minZ = controller.minZoom;
             final maxZ = controller.maxZoom;
-            // Only show slider if device supports zooming beyond 1x
             if (maxZ <= minZ + 0.1) return const SizedBox.shrink();
-            return Row(
-              children: [
-                Icon(Icons.zoom_out_rounded, size: 18, color: theme.colorScheme.onSurfaceVariant),
-                Expanded(
-                  child: Slider(
-                    value: controller.zoomLevel.value.clamp(minZ, maxZ),
-                    min: minZ,
-                    max: maxZ,
-                    divisions: ((maxZ - minZ) * 10).toInt().clamp(1, 50),
-                    label: '${controller.zoomLevel.value.toStringAsFixed(1)}×',
-                    activeColor: theme.colorScheme.primary,
-                    onChanged: (v) => controller.setZoom(v),
-                  ),
-                ),
-                Icon(Icons.zoom_in_rounded, size: 18, color: theme.colorScheme.onSurfaceVariant),
-                const SizedBox(width: 4),
-                SizedBox(
-                  width: 36,
-                  child: Text(
-                    '${controller.zoomLevel.value.toStringAsFixed(1)}×',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+            return Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Row(
+                children: [
+                  Icon(Icons.zoom_out_rounded, size: 16, color: theme.colorScheme.onSurfaceVariant),
+                  Expanded(
+                    child: Slider(
+                      value: controller.zoomLevel.value.clamp(minZ, maxZ),
+                      min: minZ,
+                      max: maxZ,
+                      divisions: ((maxZ - minZ) * 10).toInt().clamp(1, 50),
+                      label: '${controller.zoomLevel.value.toStringAsFixed(1)}×',
+                      activeColor: AppColors.primary,
+                      onChanged: (v) => controller.setZoom(v),
                     ),
-                    textAlign: TextAlign.end,
                   ),
-                ),
-              ],
+                  Icon(Icons.zoom_in_rounded, size: 16, color: theme.colorScheme.onSurfaceVariant),
+                  const SizedBox(width: 4),
+                  SizedBox(
+                    width: 34,
+                    child: Text(
+                      '${controller.zoomLevel.value.toStringAsFixed(1)}×',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                      textAlign: TextAlign.end,
+                    ),
+                  ),
+                ],
+              ),
             );
           }),
         ],
@@ -93,7 +124,7 @@ class ScanControlsBar extends StatelessWidget {
   }
 }
 
-// ── Torch button ──────────────────────────────────────────────────────────────
+// ── Control Button ────────────────────────────────────────────────────────────
 
 class _ControlButton extends StatelessWidget {
   final IconData icon;
@@ -118,7 +149,7 @@ class _ControlButton extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: active ? activeColor.withAlpha(30) : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
@@ -130,7 +161,7 @@ class _ControlButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 16, color: active ? activeColor : theme.colorScheme.onSurfaceVariant),
+            Icon(icon, size: 15, color: active ? activeColor : theme.colorScheme.onSurfaceVariant),
             const SizedBox(width: 4),
             Text(
               label,
@@ -171,9 +202,9 @@ class _ConfidenceSelector extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
         Text(
-          'Min Conf:',
+          'Conf:',
           style: theme.textTheme.labelSmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant.withAlpha(180),
+            color: theme.colorScheme.onSurfaceVariant.withAlpha(160),
           ),
         ),
         const SizedBox(width: 4),
