@@ -69,9 +69,8 @@ dependencies:
 
   # Live Scan OCR & Object Detection
   camera: ^0.10.6
-  google_mlkit_text_recognition: ^0.13.0
+  google_mlkit_text_recognition: ^0.16.0
   tflite_flutter: ^0.12.1
-  google_mlkit_object_detection: ^0.13.0
   image: ^4.2.0
 dev_dependencies:
   flutter_test:
