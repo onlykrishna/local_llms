@@ -116,18 +116,18 @@ class LiveVisionService extends GetxService {
         return '';
       }
 
-      final trimmed = response.trim();
-      final upper = trimmed.toUpperCase();
+      final cleaned = cleanReasoningText(response).trim();
+      final upper = cleaned.toUpperCase();
       if (upper == 'NO_CHANGE' || upper == 'NO CHANGE' || upper.contains('NO_CHANGE')) {
         debugPrint('👁️ LiveVisionService [$tag]: Scene unchanged (NO_CHANGE).');
         return '';
       }
 
-      if (trimmed.isNotEmpty) {
-        latestNarration.value = trimmed;
+      if (cleaned.isNotEmpty) {
+        latestNarration.value = cleaned;
       }
-      debugPrint('👁️ LiveVisionService [$tag]: "$trimmed"');
-      return trimmed;
+      debugPrint('👁️ LiveVisionService [$tag]: "$cleaned"');
+      return cleaned;
     } catch (e) {
       debugPrint('❌ LiveVisionService [$tag] error: $e');
       return '';

@@ -39,6 +39,54 @@ class MainActivity : FlutterActivity() {
             }
             return false
         }
+
+        fun invokeCustomQuestionCallback(question: String, jpegBytes: ByteArray): Boolean {
+            val channel = channelInstance
+            if (channel != null && isEngineActive) {
+                try {
+                    Handler(Looper.getMainLooper()).post {
+                        channel.invokeMethod("onCustomQuestionSubmitted", mapOf(
+                            "question" to question,
+                            "bytes" to jpegBytes
+                        ))
+                    }
+                    return true
+                } catch (e: Exception) {
+                    android.util.Log.e("MainActivity", "Failed to invoke custom question callback: ${e.message}")
+                }
+            }
+            return false
+        }
+
+        fun invokeServiceStoppedCallback(): Boolean {
+            val channel = channelInstance
+            if (channel != null && isEngineActive) {
+                try {
+                    Handler(Looper.getMainLooper()).post {
+                        channel.invokeMethod("onServiceStopped", null)
+                    }
+                    return true
+                } catch (e: Exception) {
+                    android.util.Log.e("MainActivity", "Failed to invoke service stopped callback: ${e.message}")
+                }
+            }
+            return false
+        }
+
+        fun stopSpeaking(): Boolean {
+            val channel = channelInstance
+            if (channel != null && isEngineActive) {
+                try {
+                    Handler(Looper.getMainLooper()).post {
+                        channel.invokeMethod("stopSpeaking", null)
+                    }
+                    return true
+                } catch (e: Exception) {
+                    android.util.Log.e("MainActivity", "Failed to invoke stopSpeaking callback: ${e.message}")
+                }
+            }
+            return false
+        }
     }
 
     private var startServiceResultCallback: MethodChannel.Result? = null
@@ -76,6 +124,19 @@ class MainActivity : FlutterActivity() {
                     FloatingBubbleService.instance?.showAnswer(answerText)
                     result.success(true)
                 }
+                "stopSpeaking" -> {
+                    stopSpeaking()
+                    result.success(true)
+                }
+                "getMuteState" -> {
+                    val isMuted = FloatingBubbleService.instance?.isMuted ?: false
+                    result.success(isMuted)
+                }
+                "setMuteState" -> {
+                    val muted = call.argument<Boolean>("isMuted") ?: false
+                    FloatingBubbleService.instance?.isMuted = muted
+                    result.success(true)
+                }
                 else -> {
                     result.notImplemented()
                 }
@@ -107,8 +168,7 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun stopBubbleService() {
-        val intent = Intent(this, FloatingBubbleService::class.java)
-        stopService(intent)
+        FloatingBubbleService.instance?.stopSelfAndCleanUp()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {

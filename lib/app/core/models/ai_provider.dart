@@ -34,9 +34,9 @@ enum AiProvider {
   String modelIdForRequest({bool hasImage = false}) {
     switch (this) {
       case AiProvider.groq:
-        // llama-4-scout supports vision; llama-3.3-70b for text-only
+        // qwen/qwen3.6-27b supports vision; llama-3.3-70b for text-only
         return hasImage
-            ? 'meta-llama/llama-4-scout-17b-16e-instruct'
+            ? 'qwen/qwen3.6-27b'
             : 'llama-3.3-70b-versatile';
       case AiProvider.gemini:
         return 'gemini-1.5-flash'; // handles both text and vision natively

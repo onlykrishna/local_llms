@@ -9,6 +9,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
+import 'package:flutter/services.dart';
 
 import 'app/core/services/analytics_service.dart';
 import 'app/core/services/api_provider_service.dart';
@@ -31,6 +32,12 @@ void main() async {
   // 1. Ensure binding + preserve splash
   final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+
+  // Lock screen orientation to portrait
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
 
   // 2. Load environment variables
   await dotenv.load(fileName: '.env');
